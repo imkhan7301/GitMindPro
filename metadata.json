@@ -1,0 +1,5 @@
+{
+  "name": "GitMind: AI Repo Analyst",
+  "description": "A sophisticated tool to import, explore, and analyze GitHub repositories using Gemini 3 Pro. Get instant summaries, code explanations, and architectural insights.",
+  "requestFramePermissions": []
+}
