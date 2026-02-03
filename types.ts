@@ -28,25 +28,54 @@ export interface Scorecard {
   security: number;
 }
 
-export interface MarketInsight {
-  competitors: { name: string; url: string; description: string }[];
-  trendingTopics: string[];
-  externalResources: { title: string; uri: string }[];
+export interface DeploymentPlan {
+  serviceName: string;
+  platform: 'Google Cloud' | 'Vercel' | 'Firebase';
+  reasoning: string;
+  configSnippet: string;
+  complexity: 'Low' | 'Medium' | 'High';
 }
 
-export interface PulseAnalysis {
-  healthScore: number;
-  topIssues: { title: string; category: 'Bug' | 'Feature' | 'Debt'; priority: 'High' | 'Medium' | 'Low' }[];
+export interface MarketPulse {
+  sentiment: string;
+  resources: { title: string; uri: string }[];
+  locations?: { name: string; uri: string; snippet?: string }[];
+}
+
+export interface FlowElement {
+  id: string;
+  type?: string;
+  data: { label: string };
+  position: { x: number; y: number };
+}
+
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  animated?: boolean;
+}
+
+export interface DeepAudit {
+  reasoning: string;
+  vulnerabilities: string[];
+  architecturalDebt: string;
 }
 
 export interface AnalysisResult {
   summary: string;
+  startupPitch: string;
+  qaScript: string;
+  aiStrategy: string;
   techStack: string[];
-  keyFeatures: string[];
   architectureSuggestion: string;
   scorecard: Scorecard;
   roadmap: string[];
   mermaidDiagram: string;
+  cloudArchitecture: DeploymentPlan[];
+  flowNodes: FlowElement[];
+  flowEdges: FlowEdge[];
 }
 
 export interface ChatMessage {
@@ -55,4 +84,17 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export type AppTab = 'intelligence' | 'blueprint' | 'market' | 'pulse';
+export interface VisualAuditResult {
+  analysis: string;
+  gaps: string[];
+  suggestions: string[];
+}
+
+export interface TerminalLog {
+  id: string;
+  timestamp: number;
+  type: 'info' | 'ai' | 'error' | 'success';
+  message: string;
+}
+
+export type AppTab = 'intelligence' | 'blueprint' | 'lab' | 'cloud' | 'market' | 'vision' | 'audit';
