@@ -1,0 +1,11 @@
+node_modules/
+.npm
+dist/
+build/
+.turbo/
+.next/
+out/
+.env.local
+.env.production.local
+.env.*.local
+*.log

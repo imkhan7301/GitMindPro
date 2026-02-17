@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# VS Code extension packages
+*.vsix
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel

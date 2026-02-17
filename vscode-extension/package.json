@@ -1,0 +1,146 @@
+{
+  "name": "gitmind-pro",
+  "displayName": "GitMind Pro - AI Repository Intelligence",
+  "description": "AI-powered repository analysis, code insights, and team intelligence powered by Google Gemini",
+  "version": "0.1.0",
+  "publisher": "gitmindpro",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Programming Languages",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "gemini",
+    "github",
+    "repository",
+    "analysis",
+    "code intelligence",
+    "team insights"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitmind.analyzeRepo",
+        "title": "GitMind: Analyze Current Repository",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "gitmind.analyzeFile",
+        "title": "GitMind: Explain Current File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "gitmind.teamHealth",
+        "title": "GitMind: Team Health Dashboard",
+        "icon": "$(organization)"
+      },
+      {
+        "command": "gitmind.openWebApp",
+        "title": "GitMind: Open Full Web App",
+        "icon": "$(globe)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gitmind-sidebar",
+          "title": "GitMind Pro",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitmind-sidebar": [
+        {
+          "type": "webview",
+          "id": "gitmind.insightsView",
+          "name": "Repository Intelligence"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "gitmind.analyzeFile",
+          "group": "gitmind",
+          "when": "editorFocus"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "gitmind.analyzeRepo",
+          "group": "gitmind"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gitmind.analyzeRepo",
+          "when": "view == gitmind.insightsView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GitMind Pro",
+      "properties": {
+        "gitmind.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Google Gemini API Key",
+          "order": 1
+        },
+        "gitmind.githubToken": {
+          "type": "string",
+          "default": "",
+          "description": "Your GitHub Personal Access Token (optional, for higher rate limits)",
+          "order": 2
+        },
+        "gitmind.autoAnalyze": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically analyze repository when opening a workspace",
+          "order": 3
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "@google/genai": "^1.34.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imkhan7301/GitMindPro"
+  },
+  "bugs": {
+    "url": "https://github.com/imkhan7301/GitMindPro/issues"
+  },
+  "homepage": "https://github.com/imkhan7301/GitMindPro#readme",
+  "license": "MIT"
+}

@@ -27,9 +27,61 @@
       }
       .neural-pulse { animation: pulse-indigo 2s infinite; }
       
+      /* Smooth entrance animations */
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes slide-in-from-bottom {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      @keyframes slide-in-from-left {
+        from { opacity: 0; transform: translateX(-20px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      
+      @keyframes slide-in-from-right {
+        from { opacity: 0; transform: translateX(20px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      
+      @keyframes zoom-in {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      
+      .animate-in {
+        animation-duration: 0.5s;
+        animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+        animation-fill-mode: both;
+      }
+      
+      .fade-in { animation-name: fade-in; }
+      .slide-in-from-bottom-4 { animation-name: slide-in-from-bottom; }
+      .slide-in-from-bottom-8 { animation-name: slide-in-from-bottom; }
+      .slide-in-from-left { animation-name: slide-in-from-left; }
+      .slide-in-from-right { animation-name: slide-in-from-right; }
+      .zoom-in { animation-name: zoom-in; }
+      
       .blueprint-grid {
         background-image: radial-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px);
         background-size: 32px 32px;
+      }
+
+      @keyframes tour-spotlight {
+        0%, 100% {
+          box-shadow:
+            0 0 0 0 rgba(245, 158, 11, 0.35),
+            0 0 24px rgba(245, 158, 11, 0.25);
+        }
+        50% {
+          box-shadow:
+            0 0 0 12px rgba(245, 158, 11, 0),
+            0 0 32px rgba(245, 158, 11, 0.35);
+        }
       }
 
       /* React Flow Overrides */
@@ -42,6 +94,10 @@
         font-weight: 700 !important;
         font-size: 12px !important;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
+      }
+      .react-flow__node.tour-spotlight {
+        border-color: #f59e0b !important;
+        animation: tour-spotlight 2.6s ease-in-out infinite;
       }
       .react-flow__edge-path {
         stroke: #6366f1 !important;
@@ -67,5 +123,6 @@
   </head>
   <body class="bg-[#020617] text-slate-100 min-h-screen selection:bg-indigo-500/30">
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
