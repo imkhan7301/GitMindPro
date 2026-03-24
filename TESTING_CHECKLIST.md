@@ -169,7 +169,7 @@ After analyzing a repo, test the NEW features:
 - [ ] Click "⚙️ Configure API Key" button
 - [ ] **Expected:** Settings panel opens
 - [ ] Search for "gitmind"
-- [ ] Paste API key: `AIzaSyAvfyXOUrLDQSU9XsxpNnyBdjWAbPJoU7w`
+- [ ] Paste API key: `[REDACTED - DO NOT COMMIT REAL KEYS]`
 - [ ] Close settings
 - [ ] **Note any issues:** _______________
 

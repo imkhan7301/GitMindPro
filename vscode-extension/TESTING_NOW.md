@@ -16,7 +16,7 @@
 **Step 3:** Configure your API key:
 - Click "⚙️ Configure API Key" button
 - Search for "gitmind" in settings
-- Paste your key: `AIzaSyAvfyXOUrLDQSU9XsxpNnyBdjWAbPJoU7w`
+- Paste your key: `[REDACTED - DO NOT COMMIT REAL KEYS]`
 - Close settings
 
 **Step 4:** Analyze a repository:
