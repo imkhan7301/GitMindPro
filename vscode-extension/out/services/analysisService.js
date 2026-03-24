@@ -41,6 +41,35 @@ const child_process = __importStar(require("child_process"));
 const util = __importStar(require("util"));
 const genai_1 = require("@google/genai");
 const exec = util.promisify(child_process.exec);
+const MODEL_CANDIDATES = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3-pro-preview'];
+const isModelAvailabilityError = (error) => {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    return (message.includes('model') &&
+        (message.includes('not found') ||
+            message.includes('not supported') ||
+            message.includes('unsupported') ||
+            message.includes('permission denied') ||
+            message.includes('not allowed')));
+};
+async function generateWithFallback(ai, request, operation) {
+    let lastError;
+    for (const model of MODEL_CANDIDATES) {
+        try {
+            return await ai.models.generateContent({
+                model,
+                contents: request.contents,
+                config: request.config
+            });
+        }
+        catch (error) {
+            lastError = error;
+            if (!isModelAvailabilityError(error)) {
+                throw error;
+            }
+        }
+    }
+    throw new Error(`${operation} failed: ${lastError instanceof Error ? lastError.message : 'All model attempts failed'}`);
+}
 async function analyzeCurrentRepo(apiKey) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
@@ -69,8 +98,7 @@ async function analyzeCurrentRepo(apiKey) {
     const fileList = files.map(f => vscode.workspace.asRelativePath(f)).join('\n');
     // Analyze with Gemini
     const ai = new genai_1.GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+    const response = await generateWithFallback(ai, {
         contents: {
             parts: [{
                     text: `Analyze this GitHub repository and provide insights:
@@ -90,7 +118,7 @@ Provide:
 4. Strategic insights for developers`
                 }]
         }
-    });
+    }, 'Repository analysis');
     const text = response.text || '';
     return {
         summary: text.substring(0, 300),
@@ -105,8 +133,7 @@ Provide:
 }
 async function analyzeCurrentFile(apiKey, fileName, content) {
     const ai = new genai_1.GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+    const response = await generateWithFallback(ai, {
         contents: {
             parts: [{
                     text: `Explain this code file in detail:
@@ -123,7 +150,7 @@ Provide:
 5. Code quality assessment`
                 }]
         }
-    });
+    }, 'File analysis');
     return response.text || 'Unable to analyze file';
 }
 async function getTeamHealth(apiKey) {
@@ -137,8 +164,7 @@ async function getTeamHealth(apiKey) {
         const { stdout } = await exec('git shortlog -sn --all --no-merges', { cwd });
         const contributors = stdout.trim().split('\n').slice(0, 10);
         const ai = new genai_1.GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+        const response = await generateWithFallback(ai, {
             contents: {
                 parts: [{
                         text: `Analyze team dynamics from these contributors:
@@ -152,7 +178,7 @@ Provide insights on:
 4. Recommendations`
                     }]
             }
-        });
+        }, 'Team health analysis');
         return {
             contributors,
             analysis: response.text || undefined

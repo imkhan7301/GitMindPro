@@ -147,3 +147,23 @@ export const saveAnalysisRecord = async (params: {
     throw new Error(`Failed to save analysis: ${error.message}`);
   }
 };
+
+export const getGitHubOrganizations = async (accessToken: string): Promise<Array<{ login: string; avatar_url: string }>> => {
+  try {
+    const response = await fetch('https://api.github.com/user/orgs', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch GitHub orgs: ${response.statusText}`);
+    }
+
+    return (await response.json()) as Array<{ login: string; avatar_url: string }>;
+  } catch (err) {
+    console.error('GitHub org fetch failed:', err);
+    return [];
+  }
+};

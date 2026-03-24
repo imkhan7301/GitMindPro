@@ -1,5 +1,5 @@
 
-import { GithubRepo, FileNode, GitHubIssue, GitHubPR, Contributor, DependencyInfo } from '../types';
+import { GithubRepo, FileNode, GitHubIssue, GitHubPR, Contributor, DependencyInfo, PullRequestFile } from '../types';
 
 const getGithubToken = (): string | undefined => {
   const token = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
@@ -53,6 +53,16 @@ interface GitHubPullRequestResponse {
   changed_files?: number;
   merged_at?: string | null;
   mergeable?: boolean | null;
+}
+
+interface GitHubPullRequestFileResponse {
+  filename: string;
+  status: 'added' | 'modified' | 'removed' | 'renamed' | string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
 }
 
 interface GitHubContributorResponse {
@@ -216,6 +226,34 @@ export const fetchPullRequests = async (owner: string, repo: string): Promise<Gi
     deletions: pr.deletions || 0,
     changed_files: pr.changed_files || 0,
     mergeable: pr.mergeable ?? null
+  }));
+};
+
+export const fetchPullRequestFiles = async (
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<PullRequestFile[]> => {
+  const response = await githubFetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100`
+  );
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => ({}));
+    const apiMessage = typeof errorPayload?.message === 'string' ? errorPayload.message : '';
+    throw new Error(
+      `Failed to fetch pull request files (HTTP ${response.status})${apiMessage ? `: ${apiMessage}` : ''}`
+    );
+  }
+
+  const data = (await response.json()) as GitHubPullRequestFileResponse[];
+  return data.map((file) => ({
+    filename: file.filename,
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+    changes: file.changes,
+    patch: file.patch,
+    previous_filename: file.previous_filename
   }));
 };
 

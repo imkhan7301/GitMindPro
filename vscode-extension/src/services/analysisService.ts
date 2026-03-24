@@ -5,6 +5,45 @@ import { GoogleGenAI } from '@google/genai';
 
 const exec = util.promisify(child_process.exec);
 
+const MODEL_CANDIDATES = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3-pro-preview'];
+
+const isModelAvailabilityError = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    return (
+        message.includes('model') &&
+        (message.includes('not found') ||
+            message.includes('not supported') ||
+            message.includes('unsupported') ||
+            message.includes('permission denied') ||
+            message.includes('not allowed'))
+    );
+};
+
+async function generateWithFallback(
+    ai: GoogleGenAI,
+    request: { contents: any; config?: any },
+    operation: string
+) {
+    let lastError: unknown;
+
+    for (const model of MODEL_CANDIDATES) {
+        try {
+            return await ai.models.generateContent({
+                model,
+                contents: request.contents,
+                config: request.config
+            });
+        } catch (error) {
+            lastError = error;
+            if (!isModelAvailabilityError(error)) {
+                throw error;
+            }
+        }
+    }
+
+    throw new Error(`${operation} failed: ${lastError instanceof Error ? lastError.message : 'All model attempts failed'}`);
+}
+
 interface RepoAnalysis {
     summary: string;
     techStack: string[];
@@ -60,8 +99,7 @@ export async function analyzeCurrentRepo(apiKey: string): Promise<RepoAnalysis> 
 
     // Analyze with Gemini
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+    const response = await generateWithFallback(ai, {
         contents: {
             parts: [{
                 text: `Analyze this GitHub repository and provide insights:
@@ -81,7 +119,7 @@ Provide:
 4. Strategic insights for developers`
             }]
         }
-    });
+    }, 'Repository analysis');
 
     const text = response.text || '';
     
@@ -99,8 +137,7 @@ Provide:
 
 export async function analyzeCurrentFile(apiKey: string, fileName: string, content: string): Promise<string> {
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+    const response = await generateWithFallback(ai, {
         contents: {
             parts: [{
                 text: `Explain this code file in detail:
@@ -117,7 +154,7 @@ Provide:
 5. Code quality assessment`
             }]
         }
-    });
+    }, 'File analysis');
 
     return response.text || 'Unable to analyze file';
 }
@@ -136,8 +173,7 @@ export async function getTeamHealth(apiKey: string): Promise<TeamHealth> {
         const contributors = stdout.trim().split('\n').slice(0, 10);
         
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+        const response = await generateWithFallback(ai, {
             contents: {
                 parts: [{
                     text: `Analyze team dynamics from these contributors:
@@ -151,7 +187,7 @@ Provide insights on:
 4. Recommendations`
                 }]
             }
-        });
+        }, 'Team health analysis');
 
         return {
             contributors,

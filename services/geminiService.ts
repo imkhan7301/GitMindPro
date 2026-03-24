@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { AnalysisResult, MarketPulse, VisualAuditResult, DeepAudit, GitHubIssue, GitHubPR, Contributor, ChatMessage, InsightSummary, VulnerabilityRemediationPlan } from "../types";
+import { AnalysisResult, MarketPulse, VisualAuditResult, DeepAudit, GitHubIssue, GitHubPR, Contributor, ChatMessage, InsightSummary, VulnerabilityRemediationPlan, PullRequestFile, PRReviewResult } from "../types";
 import { logger } from "../utils/logger";
 import { apiRateLimiter } from "../utils/rateLimiter";
 import { AppError, ErrorCodes, handleError } from "../utils/errorHandler";
@@ -49,6 +49,62 @@ const checkRateLimit = (identifier: string = 'default'): void => {
 const getTimeoutMs = (): number => {
   const raw = Number(import.meta.env.VITE_GEMINI_TIMEOUT_MS ?? 90000);
   return Number.isFinite(raw) && raw > 0 ? raw : 90000;
+};
+
+const getModelCandidates = (): string[] => {
+  const preferred = (import.meta.env.VITE_GEMINI_MODEL || '').toString().trim();
+  const candidates = [
+    preferred,
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-3-pro-preview'
+  ].filter(Boolean);
+
+  return Array.from(new Set(candidates));
+};
+
+const isModelAvailabilityError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('model') &&
+    (message.includes('not found') ||
+      message.includes('not supported') ||
+      message.includes('unsupported') ||
+      message.includes('permission denied') ||
+      message.includes('not allowed'))
+  );
+};
+
+const generateContentWithFallback = async (
+  ai: GoogleGenAI,
+  request: { contents: any; config?: any },
+  operation: string
+) => {
+  const models = getModelCandidates();
+  let lastError: unknown;
+
+  for (const model of models) {
+    try {
+      logger.info(`${operation}: trying model`, { model });
+      return await ai.models.generateContent({
+        model,
+        contents: request.contents,
+        config: request.config
+      });
+    } catch (error) {
+      lastError = error;
+      logger.warn(`${operation}: model attempt failed`, {
+        model,
+        reason: error instanceof Error ? error.message : String(error)
+      });
+
+      if (!isModelAvailabilityError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error(`${operation}: all model attempts failed`);
 };
 
 const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
@@ -203,55 +259,62 @@ export const analyzeRepository = async (
     Joe: Skeptical question about tech moat.
     Jane: Visionary answer explaining the repo's logic.`;
 
-    const response = await withTimeout(ai.models.generateContent({
-      model: "gemini-3-pro-preview",
-      contents: {
-        parts: [{
-          text: prompt + `\n\nCONTEXT:\nRepo: ${repoInfo}\nFiles: ${structure.substring(0, 2000)}\nREADME: ${readmeContent.substring(0, 2000)}`
-        }]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            summary: { type: Type.STRING },
-            startupPitch: { type: Type.STRING },
-            qaScript: { type: Type.STRING },
-            aiStrategy: { type: Type.STRING },
-            techStack: { type: Type.ARRAY, items: { type: Type.STRING } },
-            architectureSuggestion: { type: Type.STRING },
-            roadmap: { type: Type.ARRAY, items: { type: Type.STRING } },
-            mermaidDiagram: { type: Type.STRING },
-            flowNodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, data: { type: Type.OBJECT, properties: { label: { type: Type.STRING } } }, position: { type: Type.OBJECT, properties: { x: { type: Type.NUMBER }, y: { type: Type.NUMBER } } } } } },
-            flowEdges: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, source: { type: Type.STRING }, target: { type: Type.STRING }, label: { type: Type.STRING }, animated: { type: Type.BOOLEAN } } } },
-            scorecard: { type: Type.OBJECT, properties: { maintenance: { type: Type.NUMBER }, documentation: { type: Type.NUMBER }, innovation: { type: Type.NUMBER }, security: { type: Type.NUMBER } }, required: ["maintenance", "documentation", "innovation", "security"] },
-            cloudArchitecture: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { serviceName: { type: Type.STRING }, platform: { type: Type.STRING }, reasoning: { type: Type.STRING }, configSnippet: { type: Type.STRING }, complexity: { type: Type.STRING } } } },
-            architectureTour: {
+    const response = await withTimeout(
+      generateContentWithFallback(
+        ai,
+        {
+          contents: {
+            parts: [{
+              text: prompt + `\n\nCONTEXT:\nRepo: ${repoInfo}\nFiles: ${structure.substring(0, 2000)}\nREADME: ${readmeContent.substring(0, 2000)}`
+            }]
+          },
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                title: { type: Type.STRING },
                 summary: { type: Type.STRING },
-                steps: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      nodeId: { type: Type.STRING },
-                      title: { type: Type.STRING },
-                      bullets: { type: Type.ARRAY, items: { type: Type.STRING } }
-                    },
-                    required: ["nodeId", "title", "bullets"]
-                  }
+                startupPitch: { type: Type.STRING },
+                qaScript: { type: Type.STRING },
+                aiStrategy: { type: Type.STRING },
+                techStack: { type: Type.ARRAY, items: { type: Type.STRING } },
+                architectureSuggestion: { type: Type.STRING },
+                roadmap: { type: Type.ARRAY, items: { type: Type.STRING } },
+                mermaidDiagram: { type: Type.STRING },
+                flowNodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, data: { type: Type.OBJECT, properties: { label: { type: Type.STRING } } }, position: { type: Type.OBJECT, properties: { x: { type: Type.NUMBER }, y: { type: Type.NUMBER } } } } } },
+                flowEdges: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, source: { type: Type.STRING }, target: { type: Type.STRING }, label: { type: Type.STRING }, animated: { type: Type.BOOLEAN } } } },
+                scorecard: { type: Type.OBJECT, properties: { maintenance: { type: Type.NUMBER }, documentation: { type: Type.NUMBER }, innovation: { type: Type.NUMBER }, security: { type: Type.NUMBER } }, required: ["maintenance", "documentation", "innovation", "security"] },
+                cloudArchitecture: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { serviceName: { type: Type.STRING }, platform: { type: Type.STRING }, reasoning: { type: Type.STRING }, configSnippet: { type: Type.STRING }, complexity: { type: Type.STRING } } } },
+                architectureTour: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    summary: { type: Type.STRING },
+                    steps: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          nodeId: { type: Type.STRING },
+                          title: { type: Type.STRING },
+                          bullets: { type: Type.ARRAY, items: { type: Type.STRING } }
+                        },
+                        required: ["nodeId", "title", "bullets"]
+                      }
+                    }
+                  },
+                  required: ["title", "summary", "steps"]
                 }
               },
-              required: ["title", "summary", "steps"]
+              required: ["summary", "startupPitch", "qaScript", "aiStrategy", "techStack", "architectureSuggestion", "roadmap", "scorecard", "mermaidDiagram", "cloudArchitecture", "flowNodes", "flowEdges", "architectureTour"]
             }
-          },
-          required: ["summary", "startupPitch", "qaScript", "aiStrategy", "techStack", "architectureSuggestion", "roadmap", "scorecard", "mermaidDiagram", "cloudArchitecture", "flowNodes", "flowEdges", "architectureTour"]
-        }
-      }
-    }), getTimeoutMs(), 'Repository analysis');
+          }
+        },
+        'Repository analysis'
+      ),
+      getTimeoutMs(),
+      'Repository analysis'
+    );
 
     logger.info('Repository analysis completed', { repoInfo });
     return JSON.parse(response.text || '{}');
@@ -634,6 +697,128 @@ export const analyzePullRequests = async (prs: GitHubPR[]): Promise<InsightSumma
   } catch (error) {
     logger.error('PR analysis failed', error as Error);
     return { overview: 'PR analysis unavailable', sections: [] };
+  }
+};
+
+export const analyzePullRequestFiles = async (
+  repository: string,
+  prNumber: number,
+  prTitle: string,
+  files: PullRequestFile[]
+): Promise<PRReviewResult> => {
+  try {
+    checkRateLimit('pr-review');
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+    const clippedFiles = files.slice(0, 30).map((file) => ({
+      filename: file.filename,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      changes: file.changes,
+      patch: (file.patch || '').slice(0, 3500)
+    }));
+
+    const response = await generateContentWithFallback(
+      ai,
+      {
+        contents: {
+          parts: [
+            {
+              text:
+                `You are a senior staff engineer doing a practical pull request review.\n` +
+                `Repository: ${repository}\n` +
+                `PR #${prNumber}: ${prTitle}\n` +
+                `Changed files JSON:\n${JSON.stringify(clippedFiles, null, 2)}\n\n` +
+                `Return JSON only with this shape:\n` +
+                `- summary: 2-4 sentence summary\n` +
+                `- riskLevel: one of low|medium|high\n` +
+                `- overallComments: array of 3-6 comments\n` +
+                `- findings: array of findings with { file, severity(low|medium|high), title, rationale, recommendation }\n` +
+                `- missingTests: array of concrete missing tests\n` +
+                `- securityChecks: array of security checks relevant to this PR\n` +
+                `- suggestedQuestions: array of reviewer questions for the author\n\n` +
+                `Rules:\n` +
+                `- Be specific and reference real file paths.\n` +
+                `- Keep recommendations actionable and low-risk.\n` +
+                `- If no serious issues exist, still provide at least one finding with low severity for hardening.`
+            }
+          ]
+        },
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: { type: Type.STRING },
+              riskLevel: { type: Type.STRING },
+              overallComments: { type: Type.ARRAY, items: { type: Type.STRING } },
+              findings: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    file: { type: Type.STRING },
+                    severity: { type: Type.STRING },
+                    title: { type: Type.STRING },
+                    rationale: { type: Type.STRING },
+                    recommendation: { type: Type.STRING }
+                  },
+                  required: ['file', 'severity', 'title', 'rationale', 'recommendation']
+                }
+              },
+              missingTests: { type: Type.ARRAY, items: { type: Type.STRING } },
+              securityChecks: { type: Type.ARRAY, items: { type: Type.STRING } },
+              suggestedQuestions: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: [
+              'summary',
+              'riskLevel',
+              'overallComments',
+              'findings',
+              'missingTests',
+              'securityChecks',
+              'suggestedQuestions'
+            ]
+          }
+        }
+      },
+      'PR review'
+    );
+
+    const parsed = JSON.parse(response.text || '{}') as Partial<PRReviewResult>;
+    const riskLevel = ['low', 'medium', 'high'].includes(String(parsed.riskLevel).toLowerCase())
+      ? (String(parsed.riskLevel).toLowerCase() as PRReviewResult['riskLevel'])
+      : 'medium';
+
+    const findings = Array.isArray(parsed.findings)
+      ? parsed.findings.map((finding) => {
+          const severity = ['low', 'medium', 'high'].includes(String(finding.severity).toLowerCase())
+            ? (String(finding.severity).toLowerCase() as 'low' | 'medium' | 'high')
+            : 'medium';
+
+          return {
+            file: finding.file || 'unknown',
+            severity,
+            title: finding.title || 'Review finding',
+            rationale: finding.rationale || 'No rationale provided.',
+            recommendation: finding.recommendation || 'Review and harden this change.'
+          };
+        })
+      : [];
+
+    return {
+      summary: parsed.summary || 'PR review completed.',
+      riskLevel,
+      overallComments: Array.isArray(parsed.overallComments) ? parsed.overallComments : [],
+      findings,
+      missingTests: Array.isArray(parsed.missingTests) ? parsed.missingTests : [],
+      securityChecks: Array.isArray(parsed.securityChecks) ? parsed.securityChecks : [],
+      suggestedQuestions: Array.isArray(parsed.suggestedQuestions) ? parsed.suggestedQuestions : []
+    };
+  } catch (error) {
+    logger.error('PR file analysis failed', error as Error);
+    throw handleError(error);
   }
 };
 

@@ -5,6 +5,7 @@ import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState,
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateRepoSummaryReport, generateProjectPlan, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
 import { canAnalyzeToday, ensureUserProfile, getCurrentUser, isAuthConfigured, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
+import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
@@ -159,6 +160,10 @@ const App: React.FC = () => {
   const [prReviewLoading, setPrReviewLoading] = useState(false);
   const [prReviewResult, setPrReviewResult] = useState<PRReviewResult | null>(null);
   const [prReviewMeta, setPrReviewMeta] = useState<{ number: number; title: string; fileCount: number } | null>(null);
+  
+  // Free tier state
+  const [freeTierStatus, setFreeTierStatus] = useState(getFreeTierStatus());
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -464,6 +469,14 @@ const App: React.FC = () => {
   const handleImport = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
+    // Check free tier for non-authenticated users
+    if (!authUser && !canUseFreeTier()) {
+      addLog('Free analyses limit reached (3/3). Sign in to continue.', 'error');
+      setShowSignupPrompt(true);
+      alert('You\'ve used all 3 free analyses. Sign in with GitHub to get unlimited access or wait until tomorrow.');
+      return;
+    }
+
     if (authEnabled) {
       if (authLoading) {
         addLog('Auth session is still loading. Continuing in guest mode for this run.', 'info');
@@ -543,6 +556,19 @@ const App: React.FC = () => {
       
       addLog('✅ AI analysis completed', 'success');
       setAnalysis(res);
+      
+      // Increment free tier counter for non-authenticated users
+      if (!authUser) {
+        const newStatus = incrementFreeTierCount();
+        setFreeTierStatus(newStatus);
+        addLog(`Free analyses used: ${newStatus.used}/${newStatus.limit}`, 'info');
+        
+        // Show signup prompt if they've used all free analyses
+        if (newStatus.used >= newStatus.limit) {
+          setShowSignupPrompt(true);
+        }
+      }
+      
       if (authEnabled && authUser) {
         void saveAnalysisRecord({
           userId: authUser.id,
@@ -1340,6 +1366,11 @@ const App: React.FC = () => {
                     <LogIn className="w-4 h-4" /> {authLoading ? 'Checking session...' : 'Sign in'}
                   </button>
                 )}
+              </div>
+            )}
+            {!authUser && !authLoading && (
+              <div className="px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-400">
+                {freeTierStatus.remaining} / {freeTierStatus.limit} free remaining
               </div>
             )}
             <div className="flex items-center gap-2">
@@ -2806,7 +2837,7 @@ const App: React.FC = () => {
                 </div>
                 <h3 className="text-xl font-black text-white mb-4">Team Intelligence</h3>
                 <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  Know who owns what code and who's actively working on features.
+                  Know who owns what code and who&apos;s actively working on features.
                 </p>
                 <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
                   <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Code Ownership</div>
@@ -2935,6 +2966,58 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Free Tier Signup Prompt Modal */}
+      {showSignupPrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 max-w-md shadow-2xl animate-in fade-in scale-95 duration-300">
+            <div className="mb-6">
+              <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-amber-400" />
+              </div>
+              <h2 className="text-2xl font-black text-white mb-2 text-center">Free Analyses Used</h2>
+              <p className="text-slate-400 text-center mb-6">
+                You&apos;ve used all {freeTierStatus.limit} free analyses. Sign in with GitHub to get unlimited access!
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-3 p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                <Rocket className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+                <span className="text-sm text-slate-300">Unlimited analyses per month</span>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                <Users className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+                <span className="text-sm text-slate-300">Save analysis history</span>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                <Shield className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+                <span className="text-sm text-slate-300">Team workspace (coming soon)</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleSignIn}
+                disabled={authBusy}
+                className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <LogIn className="w-4 h-4" /> Sign in with GitHub
+              </button>
+              <button
+                onClick={() => setShowSignupPrompt(false)}
+                className="w-full px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl transition-all"
+              >
+                Maybe Later
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 text-center mt-6">
+              Your analyses will be saved to your profile after signing in.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className={`fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 transition-all duration-500 z-[100] ${isTerminalOpen ? 'h-[400px]' : 'h-14'}`}>
          <div className="h-14 flex items-center justify-between px-10 border-b border-slate-800 cursor-pointer" onClick={() => setIsTerminalOpen(!isTerminalOpen)}>

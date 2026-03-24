@@ -146,6 +146,34 @@ export interface GitHubPR {
   mergeable: boolean | null;
 }
 
+export interface PullRequestFile {
+  filename: string;
+  status: 'added' | 'modified' | 'removed' | 'renamed' | string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
+export interface PRReviewFinding {
+  file: string;
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  rationale: string;
+  recommendation: string;
+}
+
+export interface PRReviewResult {
+  summary: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  overallComments: string[];
+  findings: PRReviewFinding[];
+  missingTests: string[];
+  securityChecks: string[];
+  suggestedQuestions: string[];
+}
+
 export interface Contributor {
   login: string;
   contributions: number;
@@ -236,4 +264,4 @@ export interface TestingInfo {
   coverage?: number;
 }
 
-export type AppTab = 'intelligence' | 'blueprint' | 'lab' | 'cloud' | 'market' | 'vision' | 'audit' | 'insights' | 'onboarding';
+export type AppTab = 'intelligence' | 'blueprint' | 'lab' | 'cloud' | 'market' | 'vision' | 'audit' | 'insights' | 'onboarding' | 'pr-review';
