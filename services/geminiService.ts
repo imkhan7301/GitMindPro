@@ -47,8 +47,8 @@ const checkRateLimit = (identifier: string = 'default'): void => {
 };
 
 const getTimeoutMs = (): number => {
-  const raw = Number(import.meta.env.VITE_GEMINI_TIMEOUT_MS ?? 90000);
-  return Number.isFinite(raw) && raw > 0 ? raw : 90000;
+  const raw = Number(import.meta.env.VITE_GEMINI_TIMEOUT_MS ?? 180000);
+  return Number.isFinite(raw) && raw > 0 ? raw : 180000;
 };
 
 const getModelCandidates = (): string[] => {
@@ -126,6 +126,36 @@ const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): P
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+};
+
+const withTimeoutRetry = async <T>(
+  runner: () => Promise<T>,
+  ms: number,
+  label: string,
+  retries = 1,
+  backoffMs = 2000
+): Promise<T> => {
+  let attempt = 0;
+  let lastError: unknown;
+
+  while (attempt <= retries) {
+    try {
+      if (attempt > 0) {
+        logger.info(`${label} retry attempt ${attempt + 1} of ${retries + 1}`);
+      }
+      return await withTimeout(runner(), ms, label);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`${label} failed on attempt ${attempt + 1}: ${message}`);
+
+      if (attempt === retries) break;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs * (attempt + 1)));
+      attempt += 1;
+    }
+  }
+
+  throw lastError;
 };
 
 export const performDeepAudit = async (repoName: string, techStack: string[], readme: string): Promise<DeepAudit> => {
@@ -259,8 +289,8 @@ export const analyzeRepository = async (
     Joe: Skeptical question about tech moat.
     Jane: Visionary answer explaining the repo's logic.`;
 
-    const response = await withTimeout(
-      generateContentWithFallback(
+    const response = await withTimeoutRetry(
+      () => generateContentWithFallback(
         ai,
         {
           contents: {
@@ -313,7 +343,9 @@ export const analyzeRepository = async (
         'Repository analysis'
       ),
       getTimeoutMs(),
-      'Repository analysis'
+      'Repository analysis',
+      1,
+      2500
     );
 
     logger.info('Repository analysis completed', { repoInfo });

@@ -117,7 +117,7 @@ export interface VisualAuditResult {
 export interface TerminalLog {
   id: string;
   timestamp: number;
-  type: 'info' | 'ai' | 'error' | 'success';
+  type: 'info' | 'ai' | 'error' | 'success' | 'warning';
   message: string;
 }
 

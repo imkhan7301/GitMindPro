@@ -757,16 +757,22 @@ const App: React.FC = () => {
         setLoadingProgress(0);
       }, 800);
 
-    } catch (err) { 
+    } catch (err) {
       const errorMessage = getErrorText(err) || 'Unknown error occurred';
       setOnboardingLoading(false);
       setLoading(false);
       setLoadingProgress(0);
       setLoadingStage('');
-      addLog(`❌ Error: ${errorMessage}`, 'error');
-      
-      // Show error in alert for visibility
-      alert(`Failed to analyze repository:\n\n${errorMessage}\n\nCheck the browser console (F12) for more details.`);
+
+      if (/timed out/i.test(errorMessage)) {
+        addLog('⏲️ AI analysis timed out; system is retrying with longer timeout. Try again in a moment.', 'warning');
+        alert(`Analysis timed out. We have increased timeout to 180s and will retry in a moment. Please re-run the analysis.
+
+${errorMessage}`);
+      } else {
+        addLog(`❌ Error: ${errorMessage}`, 'error');
+        alert(`Failed to analyze repository:\n\n${errorMessage}\n\nCheck the browser console (F12) for more details.`);
+      }
     }
   };
 
