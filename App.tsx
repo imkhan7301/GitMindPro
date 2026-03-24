@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
+import { jsPDF } from 'jspdf';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateRepoSummaryReport, generateProjectPlan, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
@@ -188,6 +189,62 @@ const App: React.FC = () => {
   const [tourHasAutoPlayed, setTourHasAutoPlayed] = useState(false);
 
   const [terminalLogs, setTerminalLogs] = useState<TerminalLog[]>([]);
+
+  const exportAnalysisPdf = useCallback(() => {
+    if (!repo || !analysis) return;
+
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    let y = 50;
+
+    doc.setFontSize(20);
+    doc.text('GitMindPro Repository Analysis', margin, y);
+    y += 30;
+
+    doc.setFontSize(12);
+    doc.text(`Repository: ${repo.owner}/${repo.repo}`, margin, y);
+    y += 18;
+    doc.text(`URL: ${repo.url}`, margin, y);
+    y += 18;
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
+    y += 24;
+
+    const addSection = (title: string, content: string) => {
+      doc.setFontSize(14);
+      doc.setTextColor(41, 128, 185);
+      doc.text(title, margin, y);
+      y += 20;
+      doc.setFontSize(11);
+      doc.setTextColor(33, 33, 33);
+
+      const text = doc.splitTextToSize(content, 520);
+      doc.text(text, margin, y);
+      y += text.length * 16 + 10;
+
+      if (y > 760) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
+    addSection('Executive Summary', analysis.summary || 'No summary available.');
+    addSection('Primary Tech Stack', analysis.techStack && analysis.techStack.length > 0 ? analysis.techStack.join(', ') : 'N/A');
+    addSection('Scorecard', `Maintenance: ${analysis.scorecard.maintenance || 'N/A'}\nDocumentation: ${analysis.scorecard.documentation || 'N/A'}\nInnovation: ${analysis.scorecard.innovation || 'N/A'}\nSecurity: ${analysis.scorecard.security || 'N/A'}`);
+
+    if (analysis.roadmap && analysis.roadmap.length > 0) {
+      addSection('Roadmap Highlights', analysis.roadmap.slice(0, 10).map((line, index) => `${index + 1}. ${line}`).join('\n'));
+    }
+
+    if (analysis.architectureTour?.summary) {
+      addSection('Architecture Tour', analysis.architectureTour.summary);
+    }
+
+    addSection('Startup Pitch', analysis.startupPitch || 'N/A');
+    addSection('AI Strategy', analysis.aiStrategy || 'N/A');
+    addSection('QA Script', analysis.qaScript || 'N/A');
+
+    doc.save(`${repo.owner}_${repo.repo}_gitmind_analysis.pdf`);
+  }, [repo, analysis]);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
   const [chatInput, setChatInput] = useState('');
@@ -1811,8 +1868,17 @@ const App: React.FC = () => {
                       </>
                     ) : analysis ? (
                       <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl">
-                        <ScoreCard scores={analysis.scorecard} />
-                        <div className="mt-12">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+                          <ScoreCard scores={analysis.scorecard} />
+                          <button
+                            onClick={exportAnalysisPdf}
+                            className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-bold rounded-xl transition-all"
+                            disabled={!analysis || !repo}
+                          >
+                            Export Report as PDF
+                          </button>
+                        </div>
+                        <div className="mt-4">
                           <h2 className="text-4xl font-black text-white tracking-tighter mb-8">Repository Overview</h2>
                           <p className="text-slate-300 leading-loose text-2xl font-medium opacity-90">{analysis.summary}</p>
                         </div>
@@ -2860,7 +2926,7 @@ const App: React.FC = () => {
                 </div>
                 <h3 className="text-xl font-black text-white mb-4">Hot Zones & Activity</h3>
                 <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  See what's changing most and avoid stepping on active development.
+                  See what&apos;s changing most and avoid stepping on active development.
                 </p>
                 <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
                   <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Recent Activity</div>
@@ -2888,9 +2954,9 @@ const App: React.FC = () => {
                 <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
                   <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Example Questions</div>
                   <div className="space-y-1">
-                    <div className="text-slate-300 text-sm">• "Who built the auth system?"</div>
-                    <div className="text-slate-300 text-sm">• "How does data flow in this app?"</div>
-                    <div className="text-slate-300 text-sm">• "What's actively being developed?"</div>
+                    <div className="text-slate-300 text-sm">• &quot;Who built the auth system?&quot;</div>
+                    <div className="text-slate-300 text-sm">• &quot;How does data flow in this app?&quot;</div>
+                    <div className="text-slate-300 text-sm">• &quot;What&apos;s actively being developed?&quot;</div>
                   </div>
                 </div>
               </div>
@@ -2937,17 +3003,17 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                   <div className="text-4xl mb-4">🚀</div>
-                  <p className="text-slate-400 text-sm italic">"Saved me 2 days onboarding to a new team. The AI explanations are spot-on."</p>
+                  <p className="text-slate-400 text-sm italic">&quot;Saved me 2 days onboarding to a new team. The AI explanations are spot-on.&quot;</p>
                   <div className="text-slate-500 text-xs mt-4">- Senior Developer</div>
                 </div>
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                   <div className="text-4xl mb-4">💡</div>
-                  <p className="text-slate-400 text-sm italic">"Finally understand who owns what code. No more guessing who to ask."</p>
+                  <p className="text-slate-400 text-sm italic">&quot;Finally understand who owns what code. No more guessing who to ask.&quot;</p>
                   <div className="text-slate-500 text-xs mt-4">- Tech Lead</div>
                 </div>
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                   <div className="text-4xl mb-4">⚡</div>
-                  <p className="text-slate-400 text-sm italic">"Hot zones feature prevented me from breaking active development. Game-changer."</p>
+                  <p className="text-slate-400 text-sm italic">&quot;Hot zones feature prevented me from breaking active development. Game-changer.&quot;</p>
                   <div className="text-slate-500 text-xs mt-4">- Consultant</div>
                 </div>
               </div>

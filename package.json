@@ -19,6 +19,7 @@
   "dependencies": {
     "@google/genai": "^1.34.0",
     "@supabase/supabase-js": "^2.95.3",
+    "jspdf": "^4.2.1",
     "lucide-react": "0.460.0",
     "mermaid": "^10.9.5",
     "react": "^19.2.3",
