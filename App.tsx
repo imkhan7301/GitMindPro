@@ -2,14 +2,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
-import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateRepoSummaryReport, generateProjectPlan, generateVulnerabilityRemediation } from './services/geminiService';
+import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateRepoSummaryReport, generateProjectPlan, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
 import { canAnalyzeToday, ensureUserProfile, getCurrentUser, isAuthConfigured, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
-import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan } from './types';
+import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -154,6 +154,11 @@ const App: React.FC = () => {
   // New: Onboarding Guide State
   const [onboardingGuide, setOnboardingGuide] = useState<OnboardingGuide | null>(null);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
+
+  const [prReviewUrl, setPrReviewUrl] = useState('');
+  const [prReviewLoading, setPrReviewLoading] = useState(false);
+  const [prReviewResult, setPrReviewResult] = useState<PRReviewResult | null>(null);
+  const [prReviewMeta, setPrReviewMeta] = useState<{ number: number; title: string; fileCount: number } | null>(null);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -461,28 +466,21 @@ const App: React.FC = () => {
 
     if (authEnabled) {
       if (authLoading) {
-        addLog('Auth session is loading. Please wait a moment.', 'info');
-        return;
-      }
-
-      if (!authUser) {
-        addLog('Sign in required before analysis', 'error');
-        alert('Please sign in with GitHub to analyze repositories.');
-        return;
-      }
-
-      try {
-        const usage = await canAnalyzeToday(authUser.id, freeDailyAnalysisLimit);
-        if (!usage.allowed) {
-          addLog(`Daily analysis limit reached (${usage.usedToday}/${usage.limit})`, 'error');
-          alert(`Daily free limit reached: ${usage.usedToday}/${usage.limit}. Please try again tomorrow or upgrade.`);
-          return;
+        addLog('Auth session is still loading. Continuing in guest mode for this run.', 'info');
+      } else if (!authUser) {
+        addLog('No signed-in user detected. Continuing in guest mode (results will not be saved).', 'info');
+      } else {
+        try {
+          const usage = await canAnalyzeToday(authUser.id, freeDailyAnalysisLimit);
+          if (!usage.allowed) {
+            addLog(`Daily analysis limit reached (${usage.usedToday}/${usage.limit})`, 'error');
+            alert(`Daily free limit reached: ${usage.usedToday}/${usage.limit}. Please try again tomorrow or upgrade.`);
+            return;
+          }
+          addLog(`Daily usage: ${usage.usedToday}/${usage.limit} analyses used`, 'info');
+        } catch (err) {
+          addLog(`Usage check failed (${getErrorText(err)}). Continuing without quota enforcement.`, 'error');
         }
-        addLog(`Daily usage: ${usage.usedToday}/${usage.limit} analyses used`, 'info');
-      } catch (err) {
-        addLog(`Usage check failed: ${getErrorText(err)}`, 'error');
-        alert(`Could not verify usage limits: ${getErrorText(err)}`);
-        return;
       }
     }
 
@@ -986,6 +984,83 @@ const App: React.FC = () => {
     return sections.join('\n\n');
   };
 
+  const extractPullRequestNumber = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (/^\d+$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+
+    const urlMatch = trimmed.match(/\/pull\/(\d+)/i);
+    if (urlMatch) {
+      return Number(urlMatch[1]);
+    }
+
+    return null;
+  };
+
+  const handleRunPrReview = async () => {
+    if (!repo || !analysis) {
+      addLog('Analyze a repository before running PR review.', 'error');
+      return;
+    }
+
+    const prNumber = extractPullRequestNumber(prReviewUrl);
+    if (!prNumber) {
+      addLog('Enter a valid PR number or GitHub pull request URL.', 'error');
+      return;
+    }
+
+    const providedRepo = parseGithubUrl(prReviewUrl);
+    if (
+      providedRepo &&
+      (providedRepo.owner.toLowerCase() !== repo.owner.toLowerCase() ||
+        providedRepo.repo.toLowerCase() !== repo.repo.toLowerCase())
+    ) {
+      addLog(`PR URL points to ${providedRepo.owner}/${providedRepo.repo}, but current repo is ${repo.owner}/${repo.repo}.`, 'error');
+      return;
+    }
+
+    setPrReviewLoading(true);
+    addLog(`Loading PR #${prNumber} files...`, 'info');
+
+    try {
+      const [prs, files] = await Promise.all([
+        fetchPullRequests(repo.owner, repo.repo),
+        fetchPullRequestFiles(repo.owner, repo.repo, prNumber)
+      ]);
+
+      const prMeta = prs.find((pr) => pr.number === prNumber);
+      const prTitle = prMeta?.title || `Pull Request #${prNumber}`;
+      if (!files.length) {
+        addLog(`PR #${prNumber} has no changed files to review.`, 'error');
+        return;
+      }
+
+      addLog(`Analyzing ${files.length} changed files with AI reviewer...`, 'ai');
+      const review = await analyzePullRequestFiles(
+        `${repo.owner}/${repo.repo}`,
+        prNumber,
+        prTitle,
+        files
+      );
+
+      setPrReviewResult(review);
+      setPrReviewMeta({
+        number: prNumber,
+        title: prTitle,
+        fileCount: files.length
+      });
+      setActiveTab('pr-review');
+      addLog(`PR review completed for #${prNumber}.`, 'success');
+    } catch (err) {
+      addLog(`PR review failed: ${getErrorText(err)}`, 'error');
+    } finally {
+      setPrReviewLoading(false);
+    }
+  };
+
   const buildGittuContext = useCallback(() => {
     const blocks: string[] = [];
 
@@ -1442,6 +1517,7 @@ const App: React.FC = () => {
                     { id: 'intelligence', label: 'Getting Started', icon: Rocket },
                     { id: 'blueprint', label: 'Architecture', icon: Layout },
                     { id: 'insights', label: 'Team & Issues', icon: Users },
+                    { id: 'pr-review', label: 'PR Review', icon: ClipboardCheck },
                     { id: 'cloud', label: 'Tech Stack', icon: Server },
                     { id: 'audit', label: 'Security', icon: BrainCircuit }
                   ].map(tab => (
@@ -1959,6 +2035,160 @@ const App: React.FC = () => {
                         <p className="text-slate-600 font-bold">Click Insights tab to load project intelligence</p>
                       </div>
                     )}
+                 </div>
+               )}
+
+               {activeTab === 'pr-review' && (
+                 <div className="space-y-8 animate-in fade-in duration-700">
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex flex-wrap items-start justify-between gap-6 mb-8">
+                       <div>
+                         <h2 className="text-3xl font-black text-white tracking-tighter flex items-center gap-3">
+                           <ClipboardCheck className="w-8 h-8 text-indigo-400" /> PR Review Copilot
+                         </h2>
+                         <p className="text-slate-400 text-sm mt-3 max-w-3xl">
+                           Paste a pull request URL or number to generate a review summary, risk level, findings, missing tests, and security checks.
+                         </p>
+                       </div>
+                       {prReviewMeta && (
+                         <div className="px-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
+                           Reviewing #{prReviewMeta.number} • {prReviewMeta.fileCount} changed files
+                         </div>
+                       )}
+                     </div>
+
+                     <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                       <input
+                         value={prReviewUrl}
+                         onChange={(e) => setPrReviewUrl(e.target.value)}
+                         placeholder="Example: https://github.com/owner/repo/pull/123 or just 123"
+                         className="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-sm text-white placeholder:text-slate-500 outline-none"
+                       />
+                       <button
+                         onClick={() => { void handleRunPrReview(); }}
+                         disabled={prReviewLoading || !repo || !analysis}
+                         className="lg:col-span-1 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40"
+                       >
+                         {prReviewLoading ? 'Reviewing...' : 'Run Review'}
+                       </button>
+                     </div>
+                   </div>
+
+                   {prReviewLoading && (
+                     <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl">
+                       <Loader message="Analyzing pull request changes..." />
+                     </div>
+                   )}
+
+                   {!prReviewLoading && prReviewResult && (
+                     <>
+                       <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl space-y-6">
+                         <div className="flex flex-wrap items-start justify-between gap-4">
+                           <div>
+                             <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Overall Summary</div>
+                             <h3 className="text-xl font-black text-white">
+                               {prReviewMeta?.title || 'Pull Request Review'}
+                             </h3>
+                           </div>
+                           <span
+                             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                               prReviewResult.riskLevel === 'high'
+                                 ? 'bg-rose-500/15 text-rose-300 border border-rose-500/40'
+                                 : prReviewResult.riskLevel === 'medium'
+                                   ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
+                                   : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
+                             }`}
+                           >
+                             Risk: {prReviewResult.riskLevel}
+                           </span>
+                         </div>
+                         <p className="text-slate-300 text-sm leading-relaxed">{prReviewResult.summary}</p>
+                         {prReviewResult.overallComments.length > 0 && (
+                           <ul className="space-y-2">
+                             {prReviewResult.overallComments.map((comment, index) => (
+                               <li key={index} className="text-slate-300 text-sm flex gap-2">
+                                 <span className="text-indigo-400">•</span>
+                                 <span>{comment}</span>
+                               </li>
+                             ))}
+                           </ul>
+                         )}
+                       </div>
+
+                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                         <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                           <h4 className="text-lg font-black text-white mb-6">Findings</h4>
+                           <div className="space-y-4 max-h-[560px] overflow-y-auto pr-2 custom-scrollbar">
+                             {prReviewResult.findings.map((finding, index) => (
+                               <div key={`${finding.file}-${index}`} className="p-5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                                 <div className="flex items-center justify-between gap-3">
+                                   <span className="text-xs font-black uppercase tracking-wider text-slate-400">{finding.file}</span>
+                                   <span className={`text-[9px] px-2 py-1 rounded font-black uppercase tracking-widest ${
+                                     finding.severity === 'high'
+                                       ? 'bg-rose-500/15 text-rose-300'
+                                       : finding.severity === 'medium'
+                                         ? 'bg-amber-500/15 text-amber-300'
+                                         : 'bg-emerald-500/15 text-emerald-300'
+                                   }`}>
+                                     {finding.severity}
+                                   </span>
+                                 </div>
+                                 <div className="text-white font-bold text-sm">{finding.title}</div>
+                                 <p className="text-slate-400 text-sm leading-relaxed">{finding.rationale}</p>
+                                 <div className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-indigo-200 text-xs leading-relaxed">
+                                   {finding.recommendation}
+                                 </div>
+                               </div>
+                             ))}
+                           </div>
+                         </div>
+
+                         <div className="space-y-8">
+                           <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                             <h4 className="text-lg font-black text-white mb-5">Missing Tests</h4>
+                             <ul className="space-y-2">
+                               {prReviewResult.missingTests.length > 0 ? prReviewResult.missingTests.map((test, index) => (
+                                 <li key={index} className="text-slate-300 text-sm flex gap-2">
+                                   <span className="text-emerald-400">•</span>
+                                   <span>{test}</span>
+                                 </li>
+                               )) : (
+                                 <li className="text-slate-500 text-sm">No additional missing tests flagged.</li>
+                               )}
+                             </ul>
+                           </div>
+
+                           <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                             <h4 className="text-lg font-black text-white mb-5">Security Checks</h4>
+                             <ul className="space-y-2">
+                               {prReviewResult.securityChecks.length > 0 ? prReviewResult.securityChecks.map((item, index) => (
+                                 <li key={index} className="text-slate-300 text-sm flex gap-2">
+                                   <span className="text-amber-400">•</span>
+                                   <span>{item}</span>
+                                 </li>
+                               )) : (
+                                 <li className="text-slate-500 text-sm">No specific security checks suggested.</li>
+                               )}
+                             </ul>
+                           </div>
+
+                           <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                             <h4 className="text-lg font-black text-white mb-5">Suggested Reviewer Questions</h4>
+                             <ul className="space-y-2">
+                               {prReviewResult.suggestedQuestions.length > 0 ? prReviewResult.suggestedQuestions.map((question, index) => (
+                                 <li key={index} className="text-slate-300 text-sm flex gap-2">
+                                   <span className="text-indigo-400">•</span>
+                                   <span>{question}</span>
+                                 </li>
+                               )) : (
+                                 <li className="text-slate-500 text-sm">No follow-up questions suggested.</li>
+                               )}
+                             </ul>
+                           </div>
+                         </div>
+                       </div>
+                     </>
+                   )}
                  </div>
                )}
 
@@ -2504,10 +2734,204 @@ const App: React.FC = () => {
 
           </div>
         ) : (
-          <div className="max-w-6xl mx-auto py-56 text-center">
-             <h1 className="text-[12rem] font-black text-white mb-16 tracking-tighter leading-[0.7] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">Understand<br/>Any Codebase.</h1>
-             <p className="text-slate-500 text-3xl max-w-5xl mx-auto mb-28 font-medium leading-relaxed">Paste a GitHub URL and get architecture, owners, hot zones, and setup in minutes.</p>
-             <button onClick={() => document.querySelector('input')?.focus()} className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-8 px-20 rounded-[2.5rem] transition-all shadow-2xl shadow-indigo-500/50 text-2xl">Analyze a Repo</button>
+          <div className="max-w-7xl mx-auto py-32 px-8">
+            {/* Hero Section */}
+            <div className="text-center mb-32">
+              <h1 className="text-[10rem] font-black text-white mb-12 tracking-tighter leading-[0.8] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
+                Understand<br/>Any Codebase.
+              </h1>
+              <p className="text-slate-400 text-2xl max-w-4xl mx-auto mb-16 font-medium leading-relaxed">
+                Stop spending hours understanding a new codebase. Get architecture, hot zones, learning path, and AI guidance in 5 minutes.
+              </p>
+              <button 
+                onClick={() => document.querySelector('input')?.focus()} 
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-6 px-16 rounded-3xl transition-all shadow-2xl shadow-indigo-500/50 text-xl mb-8"
+              >
+                Analyze a Repo
+              </button>
+              <p className="text-slate-500 text-sm">Free for 3 analyses • No signup required</p>
+            </div>
+
+            {/* Screenshots/Features Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-32">
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
+                  <Rocket className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-black text-white mb-4">Getting Started Guide</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  Instant onboarding with personalized learning path and critical files to read first.
+                </p>
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Example Output</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                      <span className="text-slate-300 text-sm">Start with README.md</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                      <span className="text-slate-300 text-sm">Check package.json for dependencies</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                      <span className="text-slate-300 text-sm">Review main entry point</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
+                  <Layout className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-black text-white mb-4">Architecture Overview</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  Interactive blueprint showing how components connect and data flows.
+                </p>
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Tech Stack Detected</div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">React</span>
+                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">TypeScript</span>
+                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">Node.js</span>
+                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">PostgreSQL</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
+                  <Users className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-black text-white mb-4">Team Intelligence</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  Know who owns what code and who's actively working on features.
+                </p>
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Code Ownership</div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-slate-300 text-sm">@johndoe</span>
+                      <span className="text-emerald-400 text-xs">Frontend Lead</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-300 text-sm">@sarahsmith</span>
+                      <span className="text-emerald-400 text-xs">Backend Dev</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
+                  <Activity className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-black text-white mb-4">Hot Zones & Activity</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  See what's changing most and avoid stepping on active development.
+                </p>
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Recent Activity</div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-slate-300 text-sm">auth/login.ts</span>
+                      <span className="text-amber-400 text-xs">🔥 Hot</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-300 text-sm">api/users.js</span>
+                      <span className="text-amber-400 text-xs">🔥 Hot</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
+                  <BrainCircuit className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-black text-white mb-4">AI Copilot</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  Ask questions about the codebase and get instant, contextual answers.
+                </p>
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Example Questions</div>
+                  <div className="space-y-1">
+                    <div className="text-slate-300 text-sm">• "Who built the auth system?"</div>
+                    <div className="text-slate-300 text-sm">• "How does data flow in this app?"</div>
+                    <div className="text-slate-300 text-sm">• "What's actively being developed?"</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
+                  <Shield className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-black text-white mb-4">Security & Testing</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                  Identify vulnerabilities, missing tests, and technical debt automatically.
+                </p>
+                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Security Insights</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-3 h-3 text-amber-400" />
+                      <span className="text-slate-300 text-sm">API keys exposed in logs</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Bug className="w-3 h-3 text-rose-400" />
+                      <span className="text-slate-300 text-sm">Missing input validation</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Demo Video Placeholder */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-12 mb-32 text-center">
+              <Video className="w-16 h-16 text-indigo-400 mx-auto mb-6" />
+              <h3 className="text-2xl font-black text-white mb-4">See It In Action</h3>
+              <p className="text-slate-400 text-lg mb-8 max-w-2xl mx-auto">
+                Watch a 45-second demo showing how GitMind Pro analyzes a real codebase from GitHub URL to full insights.
+              </p>
+              <button className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 px-8 rounded-2xl transition-all">
+                Watch Demo Video
+              </button>
+            </div>
+
+            {/* Trust Signals */}
+            <div className="text-center mb-32">
+              <h3 className="text-xl font-black text-white mb-8">Trusted by Developers</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                  <div className="text-4xl mb-4">🚀</div>
+                  <p className="text-slate-400 text-sm italic">"Saved me 2 days onboarding to a new team. The AI explanations are spot-on."</p>
+                  <div className="text-slate-500 text-xs mt-4">- Senior Developer</div>
+                </div>
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                  <div className="text-4xl mb-4">💡</div>
+                  <p className="text-slate-400 text-sm italic">"Finally understand who owns what code. No more guessing who to ask."</p>
+                  <div className="text-slate-500 text-xs mt-4">- Tech Lead</div>
+                </div>
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                  <div className="text-4xl mb-4">⚡</div>
+                  <p className="text-slate-400 text-sm italic">"Hot zones feature prevented me from breaking active development. Game-changer."</p>
+                  <div className="text-slate-500 text-xs mt-4">- Consultant</div>
+                </div>
+              </div>
+            </div>
+
+            {/* CTA */}
+            <div className="text-center">
+              <h2 className="text-4xl font-black text-white mb-8">Ready to Understand Any Codebase?</h2>
+              <button 
+                onClick={() => document.querySelector('input')?.focus()} 
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-6 px-12 rounded-3xl transition-all shadow-2xl shadow-indigo-500/50 text-xl"
+              >
+                Try GitMind Pro Free
+              </button>
+            </div>
           </div>
         )}
       </main>
