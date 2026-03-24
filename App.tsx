@@ -591,6 +591,9 @@ const App: React.FC = () => {
         details.defaultBranch,
         fastMode ? { maxEntries: maxTreeEntries } : undefined
       );
+      // Show the repo tree while AI analysis is in progress
+      setRepo(details);
+      setStructure(tree);
       setLoadingProgress(30);
 
       // PHASE 2: Get README (40% progress)
@@ -1606,19 +1609,26 @@ ${errorMessage}`);
             </div>
 
             <div className="col-span-12 xl:col-span-6 space-y-10">
-               <div className="flex flex-wrap gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] w-fit shadow-2xl">
-                  {[
-                    { id: 'intelligence', label: 'Getting Started', icon: Rocket },
-                    { id: 'blueprint', label: 'Architecture', icon: Layout },
-                    { id: 'insights', label: 'Team & Issues', icon: Users },
-                    { id: 'pr-review', label: 'PR Review', icon: ClipboardCheck },
-                    { id: 'cloud', label: 'Tech Stack', icon: Server },
-                    { id: 'audit', label: 'Security', icon: BrainCircuit }
-                  ].map(tab => (
-                    <button key={tab.id} onClick={() => { setActiveTab(tab.id as AppTab); if (tab.id === 'insights' && !insights) fetchProjectInsights(); }} className={`flex items-center gap-2 px-6 py-3 rounded-[1.2rem] text-[9px] font-black uppercase tracking-[0.15em] transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-2xl' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'}`}>
-                      <tab.icon className="w-3.5 h-3.5" /> {tab.label}
+               <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'intelligence', label: 'Getting Started', icon: Rocket },
+                      { id: 'blueprint', label: 'Architecture', icon: Layout },
+                      { id: 'insights', label: 'Team & Issues', icon: Users },
+                      { id: 'pr-review', label: 'PR Review', icon: ClipboardCheck },
+                      { id: 'cloud', label: 'Tech Stack', icon: Server },
+                      { id: 'audit', label: 'Security', icon: BrainCircuit }
+                    ].map(tab => (
+                      <button key={tab.id} onClick={() => { setActiveTab(tab.id as AppTab); if (tab.id === 'insights' && !insights) fetchProjectInsights(); }} className={`flex items-center gap-2 px-6 py-3 rounded-[1.2rem] text-[9px] font-black uppercase tracking-[0.15em] transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-2xl' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'}`}>
+                        <tab.icon className="w-3.5 h-3.5" /> {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                  {analysis && (
+                    <button onClick={exportAnalysisPdf} className="ml-auto px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black rounded-xl transition-all text-xs">
+                      Export to PDF
                     </button>
-                  ))}
+                  )}
                </div>
 
                {activeTab === 'intelligence' && (
