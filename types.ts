@@ -89,6 +89,14 @@ export interface AnalysisResult {
   architectureTour: ArchitectureTour;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  role: 'owner' | 'admin' | 'member';
+  isPersonal: boolean;
+}
+
 export interface ArchitectureTourStep {
   nodeId: string;
   title: string;

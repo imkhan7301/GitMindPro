@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { AnalysisResult } from '../types';
+import { AnalysisResult, Workspace } from '../types';
 
 // Fallback values are anon/public and keep auth working if a deployment misses env injection.
 const fallbackSupabaseUrl = 'https://kkdgrbixapjlpynuulie.supabase.co';
@@ -97,6 +97,146 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
   }
 };
 
+const slugifyWorkspace = (name: string): string => (
+  name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 40)
+);
+
+const buildUniqueSlug = (name: string): string => {
+  const base = slugifyWorkspace(name) || 'workspace';
+  const suffix = Math.random().toString(36).slice(2, 7);
+  return `${base}-${suffix}`;
+};
+
+export const ensurePersonalWorkspace = async (user: User): Promise<string> => {
+  const supabase = getClient();
+
+  const { data: existingMemberships, error: selectError } = await supabase
+    .from('organization_memberships')
+    .select('organization_id, organizations!inner(id, is_personal, created_by)')
+    .eq('user_id', user.id);
+
+  if (selectError) {
+    throw new Error(`Failed to load workspaces: ${selectError.message}`);
+  }
+
+  const personalOrg = (existingMemberships || []).find((row: any) => {
+    const org = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations;
+    return org?.is_personal === true;
+  });
+
+  if (personalOrg?.organization_id) {
+    return personalOrg.organization_id as string;
+  }
+
+  const personalName = user.user_metadata?.user_name
+    ? `${user.user_metadata.user_name}'s Workspace`
+    : `${user.email?.split('@')[0] || 'My'} Workspace`;
+
+  const { data: orgData, error: orgError } = await supabase
+    .from('organizations')
+    .insert({
+      name: personalName,
+      slug: buildUniqueSlug(personalName),
+      created_by: user.id,
+      is_personal: true,
+      updated_at: new Date().toISOString()
+    })
+    .select('id')
+    .single();
+
+  if (orgError || !orgData?.id) {
+    throw new Error(`Failed to create personal workspace: ${orgError?.message || 'unknown error'}`);
+  }
+
+  const { error: membershipError } = await supabase.from('organization_memberships').insert({
+    organization_id: orgData.id,
+    user_id: user.id,
+    role: 'owner'
+  });
+
+  if (membershipError) {
+    throw new Error(`Failed to create membership: ${membershipError.message}`);
+  }
+
+  return orgData.id as string;
+};
+
+export const listUserWorkspaces = async (userId: string): Promise<Workspace[]> => {
+  const supabase = getClient();
+
+  const { data, error } = await supabase
+    .from('organization_memberships')
+    .select('role, organizations!inner(id, name, slug, is_personal, created_at)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true, foreignTable: 'organizations' });
+
+  if (error) {
+    throw new Error(`Failed to load workspaces: ${error.message}`);
+  }
+
+  const rows = (data || []) as any[];
+  return rows
+    .map((row) => {
+      const org = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations;
+      if (!org?.id) return null;
+      return {
+        id: org.id as string,
+        name: org.name as string,
+        slug: org.slug as string,
+        role: row.role as Workspace['role'],
+        isPersonal: Boolean(org.is_personal)
+      };
+    })
+    .filter(Boolean) as Workspace[];
+};
+
+export const createWorkspace = async (user: User, name: string): Promise<Workspace> => {
+  const supabase = getClient();
+  const cleanName = name.trim();
+  if (!cleanName) {
+    throw new Error('Workspace name is required.');
+  }
+
+  const { data: orgData, error: orgError } = await supabase
+    .from('organizations')
+    .insert({
+      name: cleanName,
+      slug: buildUniqueSlug(cleanName),
+      created_by: user.id,
+      is_personal: false,
+      updated_at: new Date().toISOString()
+    })
+    .select('id, name, slug, is_personal')
+    .single();
+
+  if (orgError || !orgData?.id) {
+    throw new Error(`Failed to create workspace: ${orgError?.message || 'unknown error'}`);
+  }
+
+  const { error: membershipError } = await supabase.from('organization_memberships').insert({
+    organization_id: orgData.id,
+    user_id: user.id,
+    role: 'owner'
+  });
+
+  if (membershipError) {
+    throw new Error(`Failed to add workspace owner: ${membershipError.message}`);
+  }
+
+  return {
+    id: orgData.id as string,
+    name: orgData.name as string,
+    slug: orgData.slug as string,
+    role: 'owner',
+    isPersonal: Boolean(orgData.is_personal)
+  };
+};
+
 export const getDailyAnalysisCount = async (userId: string): Promise<number> => {
   const supabase = getClient();
   const start = new Date();
@@ -129,6 +269,7 @@ export const canAnalyzeToday = async (
 
 export const saveAnalysisRecord = async (params: {
   userId: string;
+  organizationId?: string | null;
   repoOwner: string;
   repoName: string;
   repoUrl: string;
@@ -138,6 +279,7 @@ export const saveAnalysisRecord = async (params: {
 
   const { error } = await supabase.from('analyses').insert({
     user_id: params.userId,
+    organization_id: params.organizationId ?? null,
     repo_owner: params.repoOwner,
     repo_name: params.repoName,
     repo_url: params.repoUrl,

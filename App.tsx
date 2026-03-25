@@ -5,9 +5,9 @@ import { jsPDF } from 'jspdf';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { canAnalyzeToday, ensureUserProfile, getCurrentUser, isAuthConfigured, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
+import { canAnalyzeToday, createWorkspace, ensurePersonalWorkspace, ensureUserProfile, getCurrentUser, isAuthConfigured, listUserWorkspaces, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
-import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult } from './types';
+import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, Workspace } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
@@ -20,6 +20,7 @@ type AiStudioBridge = {
 
 type FlowNodeData = { label: string };
 type FindingStatus = 'new' | 'confirmed' | 'false-positive' | 'resolved';
+const ACTIVE_WORKSPACE_KEY = 'gitmind.activeWorkspaceId';
 
 declare global {
   interface Window {
@@ -137,6 +138,9 @@ const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(authEnabled);
   const [authBusy, setAuthBusy] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
   
   const [repo, setRepo] = useState<GithubRepo | null>(null);
   const [structure, setStructure] = useState<FileNode[]>([]);
@@ -283,6 +287,32 @@ const App: React.FC = () => {
     setTerminalLogs(prev => [...prev, { id: Math.random().toString(36), timestamp: Date.now(), type, message }].slice(-50));
   }, []);
 
+  const loadUserWorkspaces = useCallback(async (user: User) => {
+    setWorkspaceLoading(true);
+    try {
+      await ensurePersonalWorkspace(user);
+      const nextWorkspaces = await listUserWorkspaces(user.id);
+      setWorkspaces(nextWorkspaces);
+
+      const savedWorkspaceId = window.localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+      const defaultWorkspaceId = nextWorkspaces.find((w) => w.isPersonal)?.id || nextWorkspaces[0]?.id || '';
+      const workspaceId = savedWorkspaceId && nextWorkspaces.some((w) => w.id === savedWorkspaceId)
+        ? savedWorkspaceId
+        : defaultWorkspaceId;
+
+      setActiveWorkspaceId(workspaceId);
+      if (workspaceId) {
+        window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+      } else {
+        window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+      }
+    } catch (err) {
+      addLog(`Workspace setup failed: ${getErrorText(err)}`, 'error');
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }, [addLog]);
+
   useEffect(() => {
     if (!authEnabled) {
       setAuthLoading(false);
@@ -299,6 +329,7 @@ const App: React.FC = () => {
           await ensureUserProfile(user).catch((err) => {
             addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
           });
+          await loadUserWorkspaces(user);
         }
       } catch (err) {
         addLog(`Auth session init failed: ${getErrorText(err)}`, 'error');
@@ -314,9 +345,16 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChange((user) => {
       setAuthUser(user);
       if (user) {
-        void ensureUserProfile(user).catch((err) => {
-          addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
-        });
+        void (async () => {
+          await ensureUserProfile(user).catch((err) => {
+            addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
+          });
+          await loadUserWorkspaces(user);
+        })();
+      } else {
+        setWorkspaces([]);
+        setActiveWorkspaceId('');
+        window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
       }
     });
 
@@ -324,7 +362,32 @@ const App: React.FC = () => {
       isDisposed = true;
       unsubscribe();
     };
-  }, [authEnabled, addLog]);
+  }, [authEnabled, addLog, loadUserWorkspaces]);
+
+  const handleCreateWorkspace = async () => {
+    if (!authUser) {
+      addLog('Sign in first to create a workspace', 'warning');
+      return;
+    }
+
+    const workspaceName = window.prompt('Workspace name');
+    if (!workspaceName) return;
+
+    setWorkspaceLoading(true);
+    try {
+      const createdWorkspace = await createWorkspace(authUser, workspaceName);
+      setWorkspaces((prev) => [...prev, createdWorkspace]);
+      setActiveWorkspaceId(createdWorkspace.id);
+      window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, createdWorkspace.id);
+      addLog(`Workspace created: ${createdWorkspace.name}`, 'success');
+    } catch (err) {
+      const message = getErrorText(err);
+      addLog(`Failed to create workspace: ${message}`, 'error');
+      alert(`Workspace creation failed: ${message}`);
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  };
 
   const handleSignIn = async () => {
     if (!authEnabled) {
@@ -632,6 +695,7 @@ const App: React.FC = () => {
       if (authEnabled && authUser) {
         void saveAnalysisRecord({
           userId: authUser.id,
+          organizationId: activeWorkspaceId || null,
           repoOwner: details.owner,
           repoName: details.repo,
           repoUrl: details.url,
@@ -1263,6 +1327,34 @@ ${errorMessage}`);
               )}
               {authUser ? (
                 <>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={activeWorkspaceId}
+                      onChange={(e) => {
+                        const nextWorkspaceId = e.target.value;
+                        setActiveWorkspaceId(nextWorkspaceId);
+                        if (nextWorkspaceId) {
+                          window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, nextWorkspaceId);
+                        }
+                      }}
+                      disabled={workspaceLoading || workspaces.length === 0}
+                      className="px-3 py-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-200"
+                    >
+                      {workspaces.length === 0 && <option value="">No Workspace</option>}
+                      {workspaces.map((workspace) => (
+                        <option key={workspace.id} value={workspace.id}>
+                          {workspace.name}{workspace.isPersonal ? ' (Personal)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleCreateWorkspace}
+                      disabled={workspaceLoading}
+                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-indigo-300 hover:text-white disabled:opacity-50"
+                    >
+                      New Workspace
+                    </button>
+                  </div>
                   <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">
                     {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
                   </span>

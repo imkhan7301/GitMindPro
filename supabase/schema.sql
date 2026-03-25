@@ -1,5 +1,7 @@
 -- GitMindPro MVP auth/profile schema
 
+create extension if not exists pgcrypto;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
@@ -23,10 +25,48 @@ create table if not exists public.analyses (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text not null unique,
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  is_personal boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.analyses
+  add column if not exists organization_id uuid references public.organizations(id) on delete set null;
+
+create table if not exists public.organization_memberships (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null check (role in ('owner', 'admin', 'member')),
+  created_at timestamptz not null default now(),
+  primary key (organization_id, user_id)
+);
+
+create table if not exists public.projects (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  repo_owner text not null,
+  repo_name text not null,
+  repo_url text not null,
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (organization_id, repo_owner, repo_name)
+);
+
 create index if not exists idx_analyses_user_created_at on public.analyses(user_id, created_at desc);
+create index if not exists idx_analyses_org_created_at on public.analyses(organization_id, created_at desc);
+create index if not exists idx_org_memberships_user on public.organization_memberships(user_id);
+create index if not exists idx_projects_org on public.projects(organization_id);
 
 alter table public.profiles enable row level security;
 alter table public.analyses enable row level security;
+alter table public.organizations enable row level security;
+alter table public.organization_memberships enable row level security;
+alter table public.projects enable row level security;
 
 create policy if not exists "profiles_select_own"
   on public.profiles for select
@@ -43,8 +83,113 @@ create policy if not exists "profiles_update_own"
 
 create policy if not exists "analyses_select_own"
   on public.analyses for select
-  using (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    and (
+      organization_id is null
+      or exists (
+        select 1
+        from public.organization_memberships m
+        where m.organization_id = analyses.organization_id
+          and m.user_id = auth.uid()
+      )
+    )
+  );
 
 create policy if not exists "analyses_insert_own"
   on public.analyses for insert
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and (
+      organization_id is null
+      or exists (
+        select 1
+        from public.organization_memberships m
+        where m.organization_id = analyses.organization_id
+          and m.user_id = auth.uid()
+      )
+    )
+  );
+
+create policy if not exists "organizations_select_member"
+  on public.organizations for select
+  using (
+    exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = organizations.id
+        and m.user_id = auth.uid()
+    )
+  );
+
+create policy if not exists "organizations_insert_creator"
+  on public.organizations for insert
+  with check (auth.uid() = created_by);
+
+create policy if not exists "organizations_update_owner_admin"
+  on public.organizations for update
+  using (
+    exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = organizations.id
+        and m.user_id = auth.uid()
+        and m.role in ('owner', 'admin')
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = organizations.id
+        and m.user_id = auth.uid()
+        and m.role in ('owner', 'admin')
+    )
+  );
+
+create policy if not exists "org_memberships_select_member"
+  on public.organization_memberships for select
+  using (
+    exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = organization_memberships.organization_id
+        and m.user_id = auth.uid()
+    )
+  );
+
+create policy if not exists "org_memberships_insert_owner_row"
+  on public.organization_memberships for insert
+  with check (
+    auth.uid() = user_id
+    and role = 'owner'
+    and exists (
+      select 1
+      from public.organizations o
+      where o.id = organization_id
+        and o.created_by = auth.uid()
+    )
+  );
+
+create policy if not exists "projects_select_member"
+  on public.projects for select
+  using (
+    exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = projects.organization_id
+        and m.user_id = auth.uid()
+    )
+  );
+
+create policy if not exists "projects_insert_member"
+  on public.projects for insert
+  with check (
+    auth.uid() = created_by
+    and exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = projects.organization_id
+        and m.user_id = auth.uid()
+    )
+  );
