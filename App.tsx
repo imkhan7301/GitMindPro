@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { jsPDF } from 'jspdf';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateRepoSummaryReport, generateProjectPlan, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
 import { canAnalyzeToday, ensureUserProfile, getCurrentUser, isAuthConfigured, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult } from './types';
@@ -19,7 +19,6 @@ type AiStudioBridge = {
 };
 
 type FlowNodeData = { label: string };
-type GittuAction = 'summary' | 'plan' | 'test' | 'refactor' | 'insights';
 type FindingStatus = 'new' | 'confirmed' | 'false-positive' | 'resolved';
 
 declare global {
@@ -251,11 +250,6 @@ const App: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-
-  const [gittuAction, setGittuAction] = useState<GittuAction>('summary');
-  const [gittuPrompt, setGittuPrompt] = useState('');
-  const [gittuOutput, setGittuOutput] = useState<string | null>(null);
-  const [gittuLoading, setGittuLoading] = useState(false);
 
   // Loading tips carousel
   const loadingTips = [
@@ -609,9 +603,15 @@ const App: React.FC = () => {
       const res = await analyzeRepository(JSON.stringify(details), JSON.stringify(tree.slice(0, 40)), readme)
         .catch(err => {
           const message = getErrorText(err);
-          addLog(`❌ AI Analysis failed: ${message}`, 'error');
-          addLog(`AI analysis error: ${message}`, 'error');
-          throw new Error(`AI analysis failed: ${message}`);
+          if (message.includes('timeout') || message.includes('timed out')) {
+            addLog('⏰ Analysis timed out - this repo might be very large or complex', 'warning');
+            addLog('💡 Try again or analyze a smaller/focused repository', 'info');
+            throw new Error('Analysis timed out. This repository might be too large or complex. Try a smaller repository or wait a moment and try again.');
+          } else {
+            addLog(`❌ AI Analysis failed: ${message}`, 'error');
+            addLog(`AI analysis error: ${message}`, 'error');
+            throw new Error(`AI analysis failed: ${message}`);
+          }
         });
       
       addLog('✅ AI analysis completed', 'success');
@@ -1027,55 +1027,6 @@ ${errorMessage}`);
 
   const testingSetup = onboardingGuide?.testingSetup;
 
-  const gittuActionPlaceholders: Record<GittuAction, string> = {
-    summary: 'Optional: audience focus (e.g., investors, new devs, CTO).',
-    plan: 'Describe the goal. Example: Launch MVP in 2 weeks with onboarding docs.',
-    test: 'Optional: testing focus or constraints.',
-    refactor: 'Optional: refactor goal or performance target.',
-    insights: 'Optional: focus area (issues, PRs, team, risks).'
-  };
-
-  const formatInsightSummaryMarkdown = (title: string, summary: InsightSummary) => {
-    const lines: string[] = [`## ${title}`];
-    if (summary?.overview) {
-      lines.push(summary.overview);
-    }
-    if (summary?.sections?.length) {
-      summary.sections.forEach((section) => {
-        lines.push(`### ${section.heading}`);
-        section.bullets.forEach((bullet) => lines.push(`- ${bullet}`));
-      });
-    }
-    return lines.join('\n');
-  };
-
-  const formatInsightsReport = (data: ProjectInsights) => {
-    const openIssues = data.issues.filter((issue) => issue.state === 'open').length;
-    const mergedPrs = data.pullRequests.filter((pr) => pr.state === 'merged').length;
-    const topDeps = data.dependencies.slice(0, 6).map((dep) => dep.name).join(', ');
-    const languages = Object.entries(data.codeHealth.languages)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([name, count]) => `${name} (${count})`)
-      .join(', ');
-
-    const sections = [
-      `# Project Insights Report`,
-      `## Snapshot`,
-      `- Total issues: ${data.issues.length} (open: ${openIssues})`,
-      `- Total PRs: ${data.pullRequests.length} (merged: ${mergedPrs})`,
-      `- Total contributors: ${data.contributors.length}`,
-      `- Languages: ${languages || 'Unavailable'}`,
-      topDeps ? `- Top dependencies: ${topDeps}` : ''
-    ].filter(Boolean);
-
-    sections.push(formatInsightSummaryMarkdown('Issues Intelligence', data.issuesSummary));
-    sections.push(formatInsightSummaryMarkdown('Pull Request Trends', data.prSummary));
-    sections.push(formatInsightSummaryMarkdown('Team Dynamics', data.teamDynamics));
-
-    return sections.join('\n\n');
-  };
-
   const extractPullRequestNumber = (value: string): number | null => {
     const trimmed = value.trim();
     if (!trimmed) return null;
@@ -1150,110 +1101,6 @@ ${errorMessage}`);
       addLog(`PR review failed: ${getErrorText(err)}`, 'error');
     } finally {
       setPrReviewLoading(false);
-    }
-  };
-
-  const buildGittuContext = useCallback(() => {
-    const blocks: string[] = [];
-
-    if (repo) {
-      blocks.push(
-        [
-          `Repo: ${repo.owner}/${repo.repo}`,
-          `URL: ${repo.url}`,
-          `Description: ${repo.description}`,
-          `Stars: ${repo.stars}, Forks: ${repo.forks}`,
-          `Primary Language: ${repo.language}`,
-          repo.topics?.length ? `Topics: ${repo.topics.join(', ')}` : ''
-        ].filter(Boolean).join('\n')
-      );
-    }
-
-    if (analysis) {
-      blocks.push(
-        [
-          `Summary: ${analysis.summary}`,
-          `Tech Stack: ${analysis.techStack.join(', ')}`,
-          `Scorecard: Maintenance ${analysis.scorecard.maintenance}, Documentation ${analysis.scorecard.documentation}, Innovation ${analysis.scorecard.innovation}, Security ${analysis.scorecard.security}`,
-          analysis.roadmap?.length ? `Roadmap: ${analysis.roadmap.slice(0, 5).join(' | ')}` : ''
-        ].filter(Boolean).join('\n')
-      );
-    }
-
-    if (onboardingGuide) {
-      blocks.push(
-        [
-          `Onboarding Quick Start: ${onboardingGuide.quickStart}`,
-          onboardingGuide.criticalFiles?.length ? `Critical Files: ${onboardingGuide.criticalFiles.slice(0, 8).join(', ')}` : '',
-          onboardingGuide.testingSetup ? `Testing: ${onboardingGuide.testingSetup.testFramework} via ${onboardingGuide.testingSetup.testCommand}` : '',
-          onboardingGuide.recentActivity ? `Recent Activity: ${onboardingGuide.recentActivity.summary}` : '',
-          onboardingGuide.codeOwnership ? `Code Ownership: ${onboardingGuide.codeOwnership}` : ''
-        ].filter(Boolean).join('\n')
-      );
-    }
-
-    if (insights) {
-      blocks.push(
-        [
-          `Issues: ${insights.issues.length} total, ${insights.issues.filter((issue) => issue.state === 'open').length} open`,
-          `PRs: ${insights.pullRequests.length} total, ${insights.pullRequests.filter((pr) => pr.state === 'merged').length} merged`,
-          `Contributors: ${insights.contributors.length}`
-        ].join('\n')
-      );
-    } else if (structure.length) {
-      blocks.push(`Files: ${structure.length} total`);
-    }
-
-    return blocks.join('\n\n');
-  }, [repo, analysis, onboardingGuide, insights, structure]);
-
-  const handleGittuAction = async () => {
-    if (!repo || !analysis) {
-      setGittuOutput('Analyze a repository first to enable Gittu actions.');
-      return;
-    }
-
-    setGittuLoading(true);
-    setGittuOutput(null);
-    addLog(`Gittu action triggered: ${gittuAction}`, 'ai');
-
-    try {
-      if (gittuAction === 'summary') {
-        const report = await generateRepoSummaryReport(buildGittuContext());
-        setGittuOutput(report);
-        return;
-      }
-
-      if (gittuAction === 'plan') {
-        const goal = gittuPrompt.trim() || `Improve and extend ${repo.repo} for the next release`;
-        const plan = await generateProjectPlan(goal, buildGittuContext());
-        setGittuOutput(plan);
-        return;
-      }
-
-      if (gittuAction === 'insights') {
-        const data = insights || await fetchProjectInsights({ activateTab: false });
-        if (!data) {
-          setGittuOutput('Unable to load project insights. Try again in a moment.');
-          return;
-        }
-        setGittuOutput(formatInsightsReport(data));
-        return;
-      }
-
-      if (!selectedFile || !fileContent) {
-        setGittuOutput('Select a file from the tree to run this action.');
-        return;
-      }
-
-      const taskResult = await synthesizeLabTask(gittuAction, selectedFile.name, fileContent);
-      const header = gittuAction === 'test' ? '# Generated Tests' : '# Refactor Suggestions';
-      setGittuOutput(`${header}\n\n${taskResult}`);
-      setActiveTab('lab');
-    } catch (err) {
-      setGittuOutput(`Error: ${getErrorText(err)}`);
-    } finally {
-      setGittuLoading(false);
     }
   };
 
@@ -2681,167 +2528,111 @@ ${errorMessage}`);
                     <span className="text-xs text-slate-400">Visible for shared screenshots and QA checks.</span>
                   </div>
                </div>
-               <div className="bg-slate-900/60 border border-slate-800 rounded-[3rem] flex flex-col max-h-[calc(100vh-220px)] min-h-[540px] sticky top-32 overflow-hidden backdrop-blur-3xl shadow-2xl">
+               <div className="bg-slate-900/60 border border-slate-800 rounded-[2rem] flex flex-col max-h-[400px] min-h-[300px] overflow-hidden backdrop-blur-3xl shadow-2xl">
                   {/* Header */}
-                  <div className="p-10 border-b border-slate-800 bg-gradient-to-r from-indigo-600/20 to-purple-600/20">
-                    <div className="flex items-center gap-3 mb-2">
-                      <BrainCircuit className="w-6 h-6 text-indigo-400" />
-                      <h3 className="text-white font-black text-xl tracking-tighter">AI Copilot</h3>
+                  <div className="p-6 border-b border-slate-800 bg-gradient-to-r from-indigo-600/20 to-purple-600/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <BrainCircuit className="w-5 h-5 text-indigo-400" />
+                        <h3 className="text-white font-black text-lg tracking-tighter">AI Copilot</h3>
+                      </div>
+                      <button
+                        onClick={() => setChatHistory([])}
+                        className="text-slate-500 hover:text-slate-300 text-xs font-medium"
+                      >
+                        Clear
+                      </button>
                     </div>
-                    <p className="text-slate-400 text-xs">Your personal onboarding assistant</p>
                   </div>
 
-                  <div className="p-8 border-b border-slate-800 bg-slate-900/70">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Gittu Actions</div>
-                      <span className="text-[10px] text-slate-500 uppercase tracking-widest">Markdown output</span>
-                    </div>
-                    <label className="text-[10px] text-slate-500 uppercase tracking-widest">Action</label>
-                    <select
-                      value={gittuAction}
-                      onChange={(e) => setGittuAction(e.target.value as GittuAction)}
-                      className="w-full mt-2 mb-4 bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 text-xs text-white"
-                    >
-                      <option value="summary">Repo summary report</option>
-                      <option value="plan">Project plan generator</option>
-                      <option value="insights">Issue/PR insights report</option>
-                      <option value="test">Generate tests for selected file</option>
-                      <option value="refactor">Refactor suggestions for selected file</option>
-                    </select>
-
-                    <label className="text-[10px] text-slate-500 uppercase tracking-widest">Goal or notes</label>
-                    <textarea
-                      rows={3}
-                      value={gittuPrompt}
-                      onChange={(e) => setGittuPrompt(e.target.value)}
-                      placeholder={gittuActionPlaceholders[gittuAction]}
-                      className="w-full mt-2 bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 text-xs text-white placeholder:text-slate-500"
-                    />
-
-                    <div className="flex items-center justify-between mt-4">
-                      <button
-                        onClick={handleGittuAction}
-                        disabled={gittuLoading || !repo}
-                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl disabled:opacity-40"
-                      >
-                        {gittuLoading ? 'Running...' : 'Run Action'}
-                      </button>
-                      <span className="text-[10px] text-slate-500">
-                        {(gittuAction === 'test' || gittuAction === 'refactor')
-                          ? (selectedFile ? `Using: ${selectedFile.name}` : 'Select a file to enable')
-                          : (repo ? `Repo: ${repo.repo}` : 'Analyze a repo first')}
-                      </span>
-                    </div>
-
-                    {gittuOutput && (
-                      <div className="mt-6 p-4 bg-slate-950 rounded-2xl border border-slate-800">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[10px] text-slate-500 uppercase tracking-widest">Output</span>
-                          <div className="flex items-center gap-3">
+                  {/* Chat Content */}
+                  <div className="flex-1 flex flex-col">
+                    {/* Suggested Questions - Compact */}
+                    {chatHistory.length === 0 && (
+                      <div className="p-4 space-y-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">💡 Quick questions:</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { q: "Where to start?", icon: "🚀" },
+                            { q: "Tech stack?", icon: "⚙️" },
+                            { q: "How to test?", icon: "🧪" },
+                            { q: "Deploy process?", icon: "🚢" }
+                          ].map((item, i) => (
                             <button
-                              onClick={() => copyToClipboard(gittuOutput, 'Gittu output')}
-                              className="text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300"
+                              key={i}
+                              onClick={() => { void submitChat(item.q); }}
+                              className="text-left p-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 rounded-xl transition-all group text-xs"
                             >
-                              Copy
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{item.icon}</span>
+                                <span className="text-slate-300 group-hover:text-white transition-colors truncate">{item.q}</span>
+                              </div>
                             </button>
-                            <button
-                              onClick={() => setGittuOutput(null)}
-                              className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-200"
-                            >
-                              Clear
-                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Chat History - Compact */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                      {chatHistory.map((msg, i) => (
+                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] p-3 rounded-xl text-sm leading-relaxed ${
+                            msg.role === 'user' 
+                              ? 'bg-indigo-600 text-white' 
+                              : 'bg-slate-800/80 text-slate-200 border border-slate-700'
+                          }`}>
+                            {msg.role === 'model' && (
+                              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-700">
+                                <BrainCircuit className="w-3 h-3 text-indigo-400" />
+                                <span className="text-xs font-bold text-indigo-400">AI</span>
+                              </div>
+                            )}
+                            <div className="whitespace-pre-wrap text-xs">{msg.text}</div>
+                            {msg.fileLinks && msg.fileLinks.length > 0 && (
+                              <div className="mt-3 space-y-1">
+                                {msg.fileLinks.map((path) => (
+                                  <button
+                                    key={path}
+                                    onClick={() => openFileByPath(path)}
+                                    className="w-full text-left px-3 py-2 bg-slate-900/60 border border-slate-700 hover:border-emerald-500/60 rounded-lg text-xs font-mono text-emerald-400 hover:text-emerald-300 transition-all"
+                                  >
+                                    {path.split('/').pop()}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <pre className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{gittuOutput}</pre>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Suggested Questions */}
-                  {chatHistory.length === 0 && (
-                    <div className="p-8 space-y-4">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">💡 Try asking me:</p>
-                      <div className="space-y-3">
-                        {[
-                          { q: "Where should I start?", icon: "🚀" },
-                          { q: "Who owns the auth system?", icon: "👤" },
-                          { q: "What's most actively developed?", icon: "🔥" },
-                          { q: "Explain the tech stack", icon: "⚙️" },
-                          { q: "How do I run tests?", icon: "🧪" },
-                          { q: "Show deployment process", icon: "🚢" }
-                        ].map((item, i) => (
-                          <button
-                            key={i}
-                            onClick={() => { void submitChat(item.q); }}
-                            className="w-full text-left p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 rounded-2xl transition-all group"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-xl">{item.icon}</span>
-                              <span className="text-sm text-slate-300 group-hover:text-white transition-colors">{item.q}</span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Chat History */}
-                  <div className="flex-grow overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                    {chatHistory.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[90%] p-5 rounded-2xl text-sm leading-relaxed ${
-                          msg.role === 'user' 
-                            ? 'bg-indigo-600 text-white' 
-                            : 'bg-slate-800/80 text-slate-200 border border-slate-700'
-                        }`}>
-                          {msg.role === 'model' && <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-700">
-                            <BrainCircuit className="w-4 h-4 text-indigo-400" />
-                            <span className="text-xs font-bold text-indigo-400">AI Copilot</span>
-                          </div>}
-                          <div className="whitespace-pre-wrap">{msg.text}</div>
-                          {msg.fileLinks && msg.fileLinks.length > 0 && (
-                            <div className="mt-4 space-y-2">
-                              {msg.fileLinks.map((path) => (
-                                <button
-                                  key={path}
-                                  onClick={() => openFileByPath(path)}
-                                  className="w-full text-left px-4 py-2 bg-slate-900/60 border border-slate-700 hover:border-emerald-500/60 rounded-xl text-xs font-mono text-emerald-400 hover:text-emerald-300 transition-all"
-                                >
-                                  {path}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                      ))}
+                      {chatLoading && (
+                        <div className="flex items-center gap-2 text-indigo-400 animate-pulse">
+                          <BrainCircuit className="w-3 h-3 animate-spin" />
+                          <span className="text-xs font-medium">Thinking...</span>
                         </div>
-                      </div>
-                    ))}
-                    {chatLoading && (
-                      <div className="flex items-center gap-3 text-indigo-400 animate-pulse">
-                        <BrainCircuit className="w-4 h-4 animate-spin" />
-                        <span className="text-sm font-medium">Thinking...</span>
-                      </div>
-                    )}
-                    <div ref={chatEndRef} />
-                  </div>
-
-                  {/* Input */}
-                  <form onSubmit={handleChat} className="p-8 border-t border-slate-800 bg-slate-900/80">
-                    <div className="relative">
-                      <input 
-                        className="w-full bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-2xl pl-6 pr-16 py-5 text-sm text-white placeholder:text-slate-500 outline-none transition-all" 
-                        placeholder="Ask me anything about this repo..." 
-                        value={chatInput} 
-                        onChange={(e) => setChatInput(e.target.value)} 
-                      />
-                      <button 
-                        type="submit" 
-                        disabled={!chatInput.trim() || chatLoading}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed p-3 transition-all"
-                      >
-                        <Send className="w-5 h-5" />
-                      </button>
+                      )}
+                      <div ref={chatEndRef} />
                     </div>
-                  </form>
+
+                    {/* Input - Compact */}
+                    <form onSubmit={handleChat} className="p-4 border-t border-slate-800 bg-slate-900/80">
+                      <div className="relative">
+                        <input 
+                          className="w-full bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-xl pl-4 pr-12 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition-all" 
+                          placeholder="Ask about this repo..." 
+                          value={chatInput} 
+                          onChange={(e) => setChatInput(e.target.value)} 
+                        />
+                        <button 
+                          type="submit" 
+                          disabled={!chatInput.trim() || chatLoading}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed p-2 transition-all"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                </div>
             </div>
 

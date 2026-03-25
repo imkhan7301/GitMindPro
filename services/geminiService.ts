@@ -344,8 +344,8 @@ export const analyzeRepository = async (
       ),
       getTimeoutMs(),
       'Repository analysis',
-      1,
-      2500
+      2, // Increased retries from 1 to 2
+      3000 // Increased backoff from 2500 to 3000ms
     );
 
     logger.info('Repository analysis completed', { repoInfo });
