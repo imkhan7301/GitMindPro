@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { AnalysisResult, Workspace } from '../types';
+import { AnalysisResult, Workspace, WorkspaceInvitation, WorkspaceMember } from '../types';
 
 // Fallback values are anon/public and keep auth working if a deployment misses env injection.
 const fallbackSupabaseUrl = 'https://kkdgrbixapjlpynuulie.supabase.co';
@@ -235,6 +235,135 @@ export const createWorkspace = async (user: User, name: string): Promise<Workspa
     role: 'owner',
     isPersonal: Boolean(orgData.is_personal)
   };
+};
+
+export const listWorkspaceMembers = async (organizationId: string): Promise<WorkspaceMember[]> => {
+  const supabase = getClient();
+
+  const { data, error } = await supabase
+    .from('organization_memberships')
+    .select('role, profiles!inner(id, email, github_login, full_name)')
+    .eq('organization_id', organizationId)
+    .order('role', { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load workspace members: ${error.message}`);
+  }
+
+  return ((data || []) as any[]).map((row) => {
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    return {
+      id: profile.id as string,
+      email: (profile.email ?? null) as string | null,
+      githubLogin: (profile.github_login ?? null) as string | null,
+      fullName: (profile.full_name ?? null) as string | null,
+      role: row.role as WorkspaceMember['role']
+    };
+  });
+};
+
+export const createWorkspaceInvitation = async (params: {
+  organizationId: string;
+  invitedEmail: string;
+  role: 'admin' | 'member';
+  createdBy: string;
+}): Promise<WorkspaceInvitation> => {
+  const supabase = getClient();
+  const cleanEmail = params.invitedEmail.trim().toLowerCase();
+  if (!cleanEmail) {
+    throw new Error('Invite email is required.');
+  }
+
+  const { data, error } = await supabase
+    .from('workspace_invitations')
+    .insert({
+      organization_id: params.organizationId,
+      invited_email: cleanEmail,
+      role: params.role,
+      created_by: params.createdBy
+    })
+    .select('id, organization_id, invited_email, role, token, expires_at')
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create invitation: ${error?.message || 'unknown error'}`);
+  }
+
+  return {
+    id: data.id as string,
+    organizationId: data.organization_id as string,
+    invitedEmail: data.invited_email as string,
+    role: data.role as WorkspaceInvitation['role'],
+    token: data.token as string,
+    expiresAt: data.expires_at as string
+  };
+};
+
+export const acceptWorkspaceInvitation = async (user: User, token: string): Promise<string> => {
+  const supabase = getClient();
+  const cleanToken = token.trim().toLowerCase();
+  if (!cleanToken) {
+    throw new Error('Invite code is required.');
+  }
+
+  const { data: invite, error: inviteError } = await supabase
+    .from('workspace_invitations')
+    .select('id, organization_id, invited_email, role, accepted_at, expires_at')
+    .eq('token', cleanToken)
+    .single();
+
+  if (inviteError || !invite) {
+    throw new Error('Invite code not found or not accessible for your account.');
+  }
+
+  if (invite.accepted_at) {
+    throw new Error('This invite has already been used.');
+  }
+
+  if (new Date(invite.expires_at as string).getTime() < Date.now()) {
+    throw new Error('This invite has expired.');
+  }
+
+  if ((invite.invited_email as string).toLowerCase() !== (user.email || '').toLowerCase()) {
+    throw new Error('This invite was created for a different email address.');
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from('organization_memberships')
+    .select('organization_id')
+    .eq('organization_id', invite.organization_id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw new Error(`Failed to check membership: ${membershipError.message}`);
+  }
+
+  if (!membership) {
+    const { error: insertError } = await supabase.from('organization_memberships').insert({
+      organization_id: invite.organization_id,
+      user_id: user.id,
+      role: invite.role
+    });
+
+    if (insertError) {
+      throw new Error(`Failed to join workspace: ${insertError.message}`);
+    }
+  }
+
+  const { error: acceptError } = await supabase
+    .from('workspace_invitations')
+    .update({
+      accepted_by: user.id,
+      accepted_at: new Date().toISOString()
+    })
+    .eq('id', invite.id);
+
+  if (acceptError) {
+    throw new Error(`Failed to mark invite as accepted: ${acceptError.message}`);
+  }
+
+  return invite.organization_id as string;
 };
 
 export const getDailyAnalysisCount = async (userId: string): Promise<number> => {

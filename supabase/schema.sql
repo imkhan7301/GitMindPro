@@ -57,16 +57,32 @@ create table if not exists public.projects (
   unique (organization_id, repo_owner, repo_name)
 );
 
+create table if not exists public.workspace_invitations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  invited_email text not null,
+  role text not null check (role in ('admin', 'member')),
+  token text not null unique default lower(encode(gen_random_bytes(12), 'hex')),
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  accepted_by uuid references public.profiles(id) on delete set null,
+  accepted_at timestamptz,
+  expires_at timestamptz not null default (now() + interval '14 days'),
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_analyses_user_created_at on public.analyses(user_id, created_at desc);
 create index if not exists idx_analyses_org_created_at on public.analyses(organization_id, created_at desc);
 create index if not exists idx_org_memberships_user on public.organization_memberships(user_id);
 create index if not exists idx_projects_org on public.projects(organization_id);
+create index if not exists idx_workspace_invitations_org on public.workspace_invitations(organization_id, created_at desc);
+create index if not exists idx_workspace_invitations_email on public.workspace_invitations(lower(invited_email));
 
 alter table public.profiles enable row level security;
 alter table public.analyses enable row level security;
 alter table public.organizations enable row level security;
 alter table public.organization_memberships enable row level security;
 alter table public.projects enable row level security;
+alter table public.workspace_invitations enable row level security;
 
 create policy if not exists "profiles_select_own"
   on public.profiles for select
@@ -171,6 +187,22 @@ create policy if not exists "org_memberships_insert_owner_row"
     )
   );
 
+create policy if not exists "org_memberships_insert_invited_row"
+  on public.organization_memberships for insert
+  with check (
+    auth.uid() = user_id
+    and role in ('admin', 'member')
+    and exists (
+      select 1
+      from public.workspace_invitations i
+      where i.organization_id = organization_memberships.organization_id
+        and i.accepted_at is null
+        and i.expires_at > now()
+        and lower(i.invited_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+        and i.role = organization_memberships.role
+    )
+  );
+
 create policy if not exists "projects_select_member"
   on public.projects for select
   using (
@@ -192,4 +224,46 @@ create policy if not exists "projects_insert_member"
       where m.organization_id = projects.organization_id
         and m.user_id = auth.uid()
     )
+  );
+
+create policy if not exists "workspace_invitations_select_visible"
+  on public.workspace_invitations for select
+  using (
+    exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = workspace_invitations.organization_id
+        and m.user_id = auth.uid()
+    )
+    or (
+      accepted_at is null
+      and expires_at > now()
+      and lower(invited_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    )
+  );
+
+create policy if not exists "workspace_invitations_insert_owner_admin"
+  on public.workspace_invitations for insert
+  with check (
+    auth.uid() = created_by
+    and exists (
+      select 1
+      from public.organization_memberships m
+      where m.organization_id = workspace_invitations.organization_id
+        and m.user_id = auth.uid()
+        and m.role in ('owner', 'admin')
+    )
+  );
+
+create policy if not exists "workspace_invitations_update_accept"
+  on public.workspace_invitations for update
+  using (
+    accepted_at is null
+    and expires_at > now()
+    and lower(invited_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  )
+  with check (
+    accepted_by = auth.uid()
+    and accepted_at is not null
+    and lower(invited_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
   );

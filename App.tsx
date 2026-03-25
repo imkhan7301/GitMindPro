@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { canAnalyzeToday, createWorkspace, ensurePersonalWorkspace, ensureUserProfile, getCurrentUser, isAuthConfigured, listUserWorkspaces, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, Workspace } from './types';
 import FileTree from './components/FileTree';
@@ -579,6 +579,114 @@ const App: React.FC = () => {
       addLog(`Copy failed: ${err}`, 'error');
     }
   }, [addLog]);
+
+  const handleInviteMember = async () => {
+    if (!authUser) {
+      addLog('Sign in first to invite members', 'warning');
+      return;
+    }
+
+    const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+    if (!activeWorkspace) {
+      addLog('Select a workspace first', 'warning');
+      return;
+    }
+
+    if (activeWorkspace.isPersonal) {
+      addLog('Create a shared workspace before inviting members', 'warning');
+      return;
+    }
+
+    if (!['owner', 'admin'].includes(activeWorkspace.role)) {
+      addLog('Only owners and admins can invite members', 'warning');
+      return;
+    }
+
+    const invitedEmail = window.prompt('Invite teammate email');
+    if (!invitedEmail) return;
+
+    const roleInput = window.prompt('Role for this invite: member or admin', 'member');
+    const role = roleInput?.toLowerCase() === 'admin' ? 'admin' : 'member';
+
+    setWorkspaceLoading(true);
+    try {
+      const invite = await createWorkspaceInvitation({
+        organizationId: activeWorkspace.id,
+        invitedEmail,
+        role,
+        createdBy: authUser.id
+      });
+
+      const inviteMessage = [
+        `GitMindPro workspace invite`,
+        `Workspace: ${activeWorkspace.name}`,
+        `Role: ${invite.role}`,
+        `Invite code: ${invite.token}`,
+        `Expires: ${new Date(invite.expiresAt).toLocaleString()}`
+      ].join('\n');
+
+      await copyToClipboard(inviteMessage, 'workspace invite');
+      alert(`Invite created for ${invite.invitedEmail}. The invite code has been copied to your clipboard.`);
+      addLog(`Invite created for ${invite.invitedEmail}`, 'success');
+    } catch (err) {
+      const message = getErrorText(err);
+      addLog(`Failed to create invite: ${message}`, 'error');
+      alert(`Invite creation failed: ${message}`);
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  };
+
+  const handleJoinWorkspace = async () => {
+    if (!authUser) {
+      addLog('Sign in first to join a workspace', 'warning');
+      return;
+    }
+
+    const inviteCode = window.prompt('Paste workspace invite code');
+    if (!inviteCode) return;
+
+    setWorkspaceLoading(true);
+    try {
+      const organizationId = await acceptWorkspaceInvitation(authUser, inviteCode);
+      await loadUserWorkspaces(authUser);
+      setActiveWorkspaceId(organizationId);
+      window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, organizationId);
+      addLog('Joined workspace successfully', 'success');
+      alert('Workspace joined successfully.');
+    } catch (err) {
+      const message = getErrorText(err);
+      addLog(`Failed to join workspace: ${message}`, 'error');
+      alert(`Join failed: ${message}`);
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  };
+
+  const handleViewMembers = async () => {
+    const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+    if (!activeWorkspace) {
+      addLog('Select a workspace first', 'warning');
+      return;
+    }
+
+    setWorkspaceLoading(true);
+    try {
+      const members = await listWorkspaceMembers(activeWorkspace.id);
+      const lines = members.map((member) => {
+        const name = member.githubLogin ? `@${member.githubLogin}` : (member.fullName || member.email || member.id);
+        return `${member.role.toUpperCase()} - ${name}`;
+      });
+      alert(`${activeWorkspace.name} members\n\n${lines.join('\n') || 'No members found.'}`);
+      addLog(`Loaded ${members.length} workspace members`, 'success');
+    } catch (err) {
+      const message = getErrorText(err);
+      addLog(`Failed to load members: ${message}`, 'error');
+      alert(`Could not load members: ${message}`);
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  };
 
   const handleImport = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -1301,6 +1409,8 @@ ${errorMessage}`);
       )
     : edges;
 
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) || null;
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30">
       <nav className="border-b border-slate-800 bg-[#020617]/95 backdrop-blur-2xl sticky top-0 z-50">
@@ -1353,6 +1463,27 @@ ${errorMessage}`);
                       className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-indigo-300 hover:text-white disabled:opacity-50"
                     >
                       New Workspace
+                    </button>
+                    <button
+                      onClick={handleJoinWorkspace}
+                      disabled={workspaceLoading}
+                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-sky-300 hover:text-white disabled:opacity-50"
+                    >
+                      Join
+                    </button>
+                    <button
+                      onClick={handleInviteMember}
+                      disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)}
+                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-violet-300 hover:text-white disabled:opacity-50"
+                    >
+                      Invite
+                    </button>
+                    <button
+                      onClick={handleViewMembers}
+                      disabled={workspaceLoading || !activeWorkspace}
+                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-emerald-300 hover:text-white disabled:opacity-50"
+                    >
+                      Members
                     </button>
                   </div>
                   <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">

@@ -97,6 +97,23 @@ export interface Workspace {
   isPersonal: boolean;
 }
 
+export interface WorkspaceMember {
+  id: string;
+  email: string | null;
+  githubLogin: string | null;
+  fullName: string | null;
+  role: 'owner' | 'admin' | 'member';
+}
+
+export interface WorkspaceInvitation {
+  id: string;
+  organizationId: string;
+  invitedEmail: string;
+  role: 'admin' | 'member';
+  token: string;
+  expiresAt: string;
+}
+
 export interface ArchitectureTourStep {
   nodeId: string;
   title: string;
