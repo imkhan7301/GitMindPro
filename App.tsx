@@ -1255,32 +1255,35 @@ ${errorMessage}`);
           </form>
 
           <div className="flex items-center gap-4">
-            {authEnabled && (
-              <div className="flex items-center gap-2">
-                {authUser ? (
-                  <>
-                    <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">
-                      {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
-                    </span>
-                    <button
-                      onClick={handleSignOut}
-                      disabled={authBusy}
-                      className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
-                    >
-                      <LogOut className="w-4 h-4" /> Sign out
-                    </button>
-                  </>
-                ) : (
+            <div className="flex items-center gap-2">
+              {!authEnabled && !authUser && (
+                <span className="px-3 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-400">
+                  Auth not configured
+                </span>
+              )}
+              {authUser ? (
+                <>
+                  <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                    {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
+                  </span>
                   <button
-                    onClick={handleSignIn}
-                    disabled={authBusy || authLoading}
-                    className="flex items-center gap-2 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                    onClick={handleSignOut}
+                    disabled={authBusy}
+                    className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
                   >
-                    <LogIn className="w-4 h-4" /> {authLoading ? 'Checking session...' : 'Sign in'}
+                    <LogOut className="w-4 h-4" /> Sign out
                   </button>
-                )}
-              </div>
-            )}
+                </>
+              ) : (
+                <button
+                  onClick={handleSignIn}
+                  disabled={authBusy || authLoading}
+                  className="flex items-center gap-2 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  <LogIn className="w-4 h-4" /> {authLoading ? 'Checking session...' : 'Sign in'}
+                </button>
+              )}
+            </div>
             {!authUser && !authLoading && (
               <div className="px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-400">
                 {freeTierStatus.remaining} / {freeTierStatus.limit} free remaining
