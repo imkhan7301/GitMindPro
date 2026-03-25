@@ -1,8 +1,12 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { AnalysisResult } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// Fallback values are anon/public and keep auth working if a deployment misses env injection.
+const fallbackSupabaseUrl = 'https://kkdgrbixapjlpynuulie.supabase.co';
+const fallbackSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtrZGdyYml4YXBqbHB5bnV1bGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNTI2OTEsImV4cCI6MjA4NjYyODY5MX0.ciQ8xgd2jyAD-n1laZ9YM0QRjLPxgzyqQXjUT6G5osw';
+
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || fallbackSupabaseUrl;
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || fallbackSupabaseAnonKey;
 
 let client: SupabaseClient | null = null;
 
