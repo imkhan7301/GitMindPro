@@ -480,6 +480,20 @@ export const getAnalysisHistory = async (params: {
   }));
 };
 
+/** Fetch a single analysis row with full raw_analysis for rehydration. */
+export const getAnalysisRaw = async (analysisId: string): Promise<{ rawAnalysis: AnalysisResult; repoUrl: string } | null> => {
+  const supabase = getClient();
+
+  const { data, error } = await supabase
+    .from('analyses')
+    .select('raw_analysis, repo_url')
+    .eq('id', analysisId)
+    .single();
+
+  if (error || !data?.raw_analysis) return null;
+  return { rawAnalysis: data.raw_analysis as unknown as AnalysisResult, repoUrl: data.repo_url as string };
+};
+
 export const savePRReview = async (params: {
   userId: string;
   organizationId?: string | null;

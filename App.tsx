@@ -5,7 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
 import type { SubscriptionStatus } from './services/stripeService';
@@ -279,6 +279,16 @@ const App: React.FC = () => {
   const [referralCopied, setReferralCopied] = useState(false);
   const [referralStats, setReferralStats] = useState<{ count: number; daysEarned: number }>({ count: 0, daysEarned: 0 });
 
+  // Command palette state
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+  const [cmdQuery, setCmdQuery] = useState('');
+  const cmdInputRef = useRef<HTMLInputElement>(null);
+
+  // Favorites (localStorage-backed)
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('gitmind.favorites') || '[]'); } catch { return []; }
+  });
+
   const exportAnalysisMarkdown = useCallback(() => {
     if (!repo || !analysis) return;
 
@@ -417,6 +427,71 @@ const App: React.FC = () => {
     }
   }, [repo, addLog]);
 
+  const toggleFavorite = useCallback((repoUrl: string) => {
+    setFavorites(prev => {
+      const next = prev.includes(repoUrl) ? prev.filter(u => u !== repoUrl) : [...prev, repoUrl];
+      localStorage.setItem('gitmind.favorites', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  /** Rehydrate a saved analysis from DB without re-running Gemini. */
+  const handleRehydrate = useCallback(async (analysisId: string) => {
+    addLog('Loading saved analysis...', 'info');
+    setLoading(true);
+    setLoadingProgress(10);
+    setLoadingStage('Loading saved analysis from database...');
+
+    try {
+      const saved = await getAnalysisRaw(analysisId);
+      if (!saved) {
+        addLog('Saved analysis not found — running fresh analysis', 'error');
+        setLoading(false);
+        return false;
+      }
+
+      setLoadingProgress(40);
+      setLoadingStage('Fetching latest repo metadata...');
+
+      const parsed = parseGithubUrl(saved.repoUrl);
+      if (!parsed) {
+        addLog('Invalid repo URL in saved analysis', 'error');
+        setLoading(false);
+        return false;
+      }
+
+      const details = await fetchRepoDetails(parsed.owner, parsed.repo);
+      setLoadingProgress(70);
+      setLoadingStage('Loading file structure...');
+
+      const tree = await fetchRepoStructure(parsed.owner, parsed.repo, details.defaultBranch, fastMode ? { maxEntries: maxTreeEntries } : undefined);
+      setLoadingProgress(90);
+
+      setRepo(details);
+      setStructure(tree);
+      setAnalysis(saved.rawAnalysis);
+      setLastAnalysisId(analysisId);
+      setIsShared(false);
+      setUrl(saved.repoUrl);
+      setActiveTab('intelligence');
+
+      setLoadingProgress(100);
+      setLoadingStage('Complete!');
+      addLog('✅ Analysis loaded from history (no re-analysis needed)', 'success');
+
+      setTimeout(() => {
+        setLoading(false);
+        setLoadingProgress(0);
+      }, 400);
+
+      return true;
+    } catch (err) {
+      addLog(`Failed to load saved analysis: ${getErrorText(err)}`, 'error');
+      setLoading(false);
+      return false;
+    }
+  }, [addLog, fastMode, maxTreeEntries]);
+
   const loadUserWorkspaces = useCallback(async (user: User) => {
     setWorkspaceLoading(true);
     try {
@@ -539,6 +614,28 @@ const App: React.FC = () => {
       unsubscribe();
     };
   }, [authEnabled, addLog, loadUserWorkspaces]);
+
+  // Cmd+K command palette shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdPaletteOpen(prev => !prev);
+        setCmdQuery('');
+      }
+      if (e.key === 'Escape') {
+        setCmdPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (cmdPaletteOpen && cmdInputRef.current) {
+      cmdInputRef.current.focus();
+    }
+  }, [cmdPaletteOpen]);
 
   // Handle Stripe checkout return
   useEffect(() => {
@@ -1703,7 +1800,10 @@ ${errorMessage}`);
           
           <form onSubmit={handleImport} className="flex-grow max-w-xl mx-12 relative group">
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-slate-500 transition-colors" />
-            <input className="w-full bg-slate-900 border border-slate-800 rounded-3xl pl-16 pr-6 py-5 text-lg text-white outline-none placeholder:text-slate-600 shadow-2xl" placeholder="Paste your company's GitHub repo URL..." value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input className="w-full bg-slate-900 border border-slate-800 rounded-3xl pl-16 pr-20 py-5 text-lg text-white outline-none placeholder:text-slate-600 shadow-2xl" placeholder="Paste your company's GitHub repo URL..." value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button type="button" onClick={() => { setCmdPaletteOpen(true); setCmdQuery(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-[10px] text-slate-500 hover:text-slate-400 transition-colors">
+              <span className="font-mono">⌘K</span>
+            </button>
           </form>
 
           <div className="flex items-center gap-4">
@@ -3466,6 +3566,49 @@ ${errorMessage}`);
               </button>
             </div>
 
+            {/* Cmd+K hint */}
+            <div className="flex items-center justify-center gap-2 mb-10 text-slate-600 text-xs">
+              <kbd className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-md font-mono text-[10px]">⌘K</kbd>
+              <span>to open command palette</span>
+            </div>
+
+            {/* Favorite Repos */}
+            {favorites.length > 0 && (
+              <div className="mb-10">
+                <h2 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Sparkles className="w-4 h-4 text-amber-400" /> Pinned Repos</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {favorites.map(favUrl => {
+                    const match = analysisHistory.find(a => a.repoUrl === favUrl);
+                    const parts = favUrl.replace('https://github.com/', '').split('/');
+                    return (
+                      <div key={favUrl} className="flex items-center gap-3 bg-slate-900/60 border border-slate-800 hover:border-amber-500/30 rounded-xl p-4 transition-all group">
+                        <button
+                          onClick={() => toggleFavorite(favUrl)}
+                          className="text-amber-400 hover:text-amber-300 flex-shrink-0"
+                          title="Unpin"
+                        >★</button>
+                        <button
+                          onClick={async () => {
+                            if (match) {
+                              const ok = await handleRehydrate(match.id);
+                              if (!ok) { setUrl(favUrl); }
+                            } else {
+                              setUrl(favUrl);
+                              setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100);
+                            }
+                          }}
+                          className="flex-1 text-left min-w-0"
+                        >
+                          <div className="text-sm font-bold text-white truncate group-hover:text-indigo-300 transition-colors">{parts[0]}/{parts[1]}</div>
+                          {match && <div className="text-[10px] text-slate-600 truncate">{match.summary?.slice(0, 60)}</div>}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Referral Card */}
             <div className="bg-gradient-to-r from-indigo-950/40 to-violet-950/40 border border-indigo-500/20 rounded-2xl p-6 mb-10 flex flex-col md:flex-row items-center gap-6">
               <div className="w-12 h-12 bg-indigo-600/20 rounded-2xl flex items-center justify-center flex-shrink-0">
@@ -3506,9 +3649,14 @@ ${errorMessage}`);
                 <AnalysisHistory
                   analyses={analysisHistory}
                   loading={historyLoading}
-                  onSelect={(repoUrl) => {
-                    setUrl(repoUrl);
+                  favorites={favorites}
+                  onToggleFavorite={toggleFavorite}
+                  onSelect={async (_repoUrl, analysisId) => {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
+                    const ok = await handleRehydrate(analysisId);
+                    if (!ok) {
+                      setUrl(_repoUrl);
+                    }
                   }}
                 />
               </div>
@@ -3703,6 +3851,68 @@ ${errorMessage}`);
           </div>
         )}
       </main>
+
+      {/* Command Palette (Cmd+K) */}
+      {cmdPaletteOpen && (() => {
+        const actions = [
+          { id: 'new', label: 'New Analysis', desc: 'Paste a GitHub URL', icon: Plus, action: () => { setCmdPaletteOpen(false); document.querySelector('input')?.focus(); } },
+          { id: 'demo', label: 'Try Demo — React', desc: 'Analyze facebook/react', icon: Rocket, action: () => { setCmdPaletteOpen(false); setUrl('https://github.com/facebook/react'); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100); } },
+          { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
+          ...(authUser ? [
+            { id: 'signout', label: 'Sign Out', desc: authUser.user_metadata?.user_name || 'GitHub account', icon: LogOut, action: () => { setCmdPaletteOpen(false); void signOutAuth(); } },
+          ] : [
+            { id: 'signin', label: 'Sign In with GitHub', desc: 'Unlock full features', icon: LogIn, action: () => { setCmdPaletteOpen(false); void signInWithGitHub(); } },
+          ]),
+          ...analysisHistory.map(a => ({
+            id: `hist-${a.id}`,
+            label: `${a.repoOwner}/${a.repoName}`,
+            desc: `Analyzed ${new Date(a.createdAt).toLocaleDateString()}`,
+            icon: Code,
+            action: async () => {
+              setCmdPaletteOpen(false);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              const ok = await handleRehydrate(a.id);
+              if (!ok) setUrl(a.repoUrl);
+            },
+          })),
+        ];
+        const filtered = cmdQuery ? actions.filter(a => `${a.label} ${a.desc}`.toLowerCase().includes(cmdQuery.toLowerCase())) : actions;
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-start justify-center pt-[20vh] p-4" onClick={() => setCmdPaletteOpen(false)}>
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800">
+                <Search className="w-4 h-4 text-slate-500" />
+                <input
+                  ref={cmdInputRef}
+                  value={cmdQuery}
+                  onChange={e => setCmdQuery(e.target.value)}
+                  placeholder="Search commands, repos..."
+                  className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-slate-600"
+                />
+                <kbd className="text-[9px] text-slate-600 font-mono border border-slate-800 px-1.5 py-0.5 rounded">ESC</kbd>
+              </div>
+              <div className="max-h-[50vh] overflow-y-auto p-2">
+                {filtered.length === 0 && (
+                  <div className="text-center py-8 text-slate-600 text-sm">No results found</div>
+                )}
+                {filtered.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => void a.action()}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800/80 text-left transition-colors group"
+                  >
+                    <a.icon className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-white font-medium truncate">{a.label}</div>
+                      <div className="text-xs text-slate-600 truncate">{a.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Free Tier Signup Prompt Modal */}
       {showSignupPrompt && (

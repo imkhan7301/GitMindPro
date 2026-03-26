@@ -5,7 +5,9 @@ import { Activity } from 'lucide-react';
 interface AnalysisHistoryProps {
   analyses: SavedAnalysis[];
   loading: boolean;
-  onSelect: (repoUrl: string) => void;
+  onSelect: (repoUrl: string, analysisId: string) => void;
+  favorites?: string[];
+  onToggleFavorite?: (repoUrl: string) => void;
 }
 
 const timeAgo = (dateStr: string): string => {
@@ -20,7 +22,7 @@ const timeAgo = (dateStr: string): string => {
   return new Date(dateStr).toLocaleDateString();
 };
 
-const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ analyses, loading, onSelect }) => {
+const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ analyses, loading, onSelect, favorites = [], onToggleFavorite }) => {
   if (loading) {
     return (
       <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8">
@@ -56,14 +58,24 @@ const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ analyses, loading, on
         {analyses.map((a) => (
           <button
             key={a.id}
-            onClick={() => onSelect(a.repoUrl)}
+            onClick={() => onSelect(a.repoUrl, a.id)}
             className="w-full text-left bg-slate-950/60 hover:bg-slate-800/60 border border-slate-800 hover:border-indigo-500/40 rounded-2xl p-4 transition-all group"
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-white font-bold text-sm group-hover:text-indigo-300 transition-colors">
                 {a.repoOwner}/{a.repoName}
               </span>
-              <span className="text-[10px] text-slate-600 font-mono">{timeAgo(a.createdAt)}</span>
+              <div className="flex items-center gap-2">
+                {onToggleFavorite && (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(a.repoUrl); }}
+                    className={`text-sm cursor-pointer hover:scale-110 transition-transform ${favorites.includes(a.repoUrl) ? 'text-amber-400' : 'text-slate-700 hover:text-amber-400'}`}
+                    title={favorites.includes(a.repoUrl) ? 'Unpin' : 'Pin to dashboard'}
+                  >{favorites.includes(a.repoUrl) ? '★' : '☆'}</span>
+                )}
+                <span className="text-[10px] text-slate-600 font-mono">{timeAgo(a.createdAt)}</span>
+              </div>
             </div>
             {a.techStack.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
