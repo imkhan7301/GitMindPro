@@ -305,7 +305,7 @@ test.describe('full regression', () => {
 
   test('landing page loads', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /Understand Any Codebase/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Understand Any Codebase.' })).toBeVisible();
     await expect(page.getByPlaceholder("Paste your company's GitHub repo URL...")).toBeVisible();
   });
 

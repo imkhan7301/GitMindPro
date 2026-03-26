@@ -5,12 +5,13 @@ import { jsPDF } from 'jspdf';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
-import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, Workspace } from './types';
+import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, SavedAnalysis, Workspace } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
+import AnalysisHistory from './components/AnalysisHistory';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck } from 'lucide-react';
 
 type AiStudioBridge = {
@@ -168,6 +169,10 @@ const App: React.FC = () => {
   // Free tier state
   const [freeTierStatus, setFreeTierStatus] = useState(getFreeTierStatus());
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+
+  // Analysis history state
+  const [analysisHistory, setAnalysisHistory] = useState<SavedAnalysis[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -312,6 +317,24 @@ const App: React.FC = () => {
       setWorkspaceLoading(false);
     }
   }, [addLog]);
+
+  const loadAnalysisHistory = useCallback(async (userId: string, orgId?: string) => {
+    setHistoryLoading(true);
+    try {
+      const history = await getAnalysisHistory({ userId, organizationId: orgId || null });
+      setAnalysisHistory(history);
+    } catch (err) {
+      addLog(`History load failed: ${getErrorText(err)}`, 'error');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [addLog]);
+
+  useEffect(() => {
+    if (authUser && activeWorkspaceId) {
+      void loadAnalysisHistory(authUser.id, activeWorkspaceId);
+    }
+  }, [authUser, activeWorkspaceId, loadAnalysisHistory]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -809,7 +832,10 @@ const App: React.FC = () => {
           repoUrl: details.url,
           analysis: res
         })
-          .then(() => addLog('Analysis saved to your profile', 'success'))
+          .then(() => {
+            addLog('Analysis saved to your profile', 'success');
+            void loadAnalysisHistory(authUser.id, activeWorkspaceId || undefined);
+          })
           .catch((err) => addLog(`Failed to save analysis: ${getErrorText(err)}`, 'error'));
       }
       setLoadingProgress(70);
@@ -3019,6 +3045,18 @@ ${errorMessage}`);
             </div>
 
             {/* Demo Video Placeholder */}
+            {authUser && (analysisHistory.length > 0 || historyLoading) && (
+              <div className="mb-32">
+                <AnalysisHistory
+                  analyses={analysisHistory}
+                  loading={historyLoading}
+                  onSelect={(repoUrl) => {
+                    setUrl(repoUrl);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              </div>
+            )}
             <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-12 mb-32 text-center">
               <Video className="w-16 h-16 text-indigo-400 mx-auto mb-6" />
               <h3 className="text-2xl font-black text-white mb-4">See It In Action</h3>

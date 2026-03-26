@@ -8,5 +8,5 @@ test('home loads and analyze button visible', async ({ page }) => {
 
 test('landing hero is visible', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Understand Any Codebase/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Understand Any Codebase.' })).toBeVisible();
 });

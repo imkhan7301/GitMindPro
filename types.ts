@@ -290,3 +290,14 @@ export interface TestingInfo {
 }
 
 export type AppTab = 'intelligence' | 'blueprint' | 'lab' | 'cloud' | 'market' | 'vision' | 'audit' | 'insights' | 'onboarding' | 'pr-review';
+
+export interface SavedAnalysis {
+  id: string;
+  repoOwner: string;
+  repoName: string;
+  repoUrl: string;
+  summary: string;
+  techStack: string[];
+  scorecard: Scorecard | null;
+  createdAt: string;
+}
