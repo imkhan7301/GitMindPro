@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, Shield, Check, X, Loader2 } from 'lucide-react';
+import { Zap, Shield, Users, Check, X, Loader2 } from 'lucide-react';
 import type { SubscriptionStatus } from '../services/stripeService';
 
 interface PricingModalProps {
@@ -14,6 +14,7 @@ const PLANS = [
     name: 'Free',
     price: '$0',
     period: '/forever',
+    icon: 'shield' as const,
     features: [
       '3 analyses per day',
       'AI code intelligence',
@@ -30,6 +31,7 @@ const PLANS = [
     name: 'Pro',
     price: '$19',
     period: '/month',
+    icon: 'zap' as const,
     features: [
       'Unlimited analyses',
       'AI code intelligence',
@@ -40,12 +42,39 @@ const PLANS = [
       'Analysis history',
       'Priority support',
     ],
-    missing: [],
+    missing: ['Team workspaces', 'Shared analysis history', 'Team analytics'],
     cta: 'Upgrade to Pro',
     priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro_placeholder',
     highlight: true,
   },
+  {
+    name: 'Team',
+    price: '$99',
+    period: '/month',
+    icon: 'users' as const,
+    features: [
+      'Everything in Pro',
+      'Up to 25 team members',
+      'Shared workspaces',
+      'Shared analysis history',
+      'Team PR review queue',
+      'Team analytics dashboard',
+      'Workspace invite links',
+      'Admin & member roles',
+      'Priority support',
+    ],
+    missing: [],
+    cta: 'Upgrade to Team',
+    priceId: import.meta.env.VITE_STRIPE_TEAM_PRICE_ID || 'price_team_placeholder',
+    highlight: false,
+  },
 ];
+
+const ICON_MAP = {
+  shield: Shield,
+  zap: Zap,
+  users: Users,
+};
 
 const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManage, subscription }) => {
   const [upgrading, setUpgrading] = useState(false);
@@ -61,7 +90,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl animate-in fade-in scale-95 duration-300">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-4xl w-full shadow-2xl animate-in fade-in scale-95 duration-300">
         <div className="flex justify-between items-center mb-8">
           <div>
             <h2 className="text-2xl font-black text-white">Choose Your Plan</h2>
@@ -72,11 +101,14 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {PLANS.map((plan) => {
             const isCurrentPlan =
               (plan.name === 'Free' && !subscription.isActive) ||
-              (plan.name === 'Pro' && subscription.plan === 'pro' && subscription.isActive);
+              (plan.name === 'Pro' && subscription.plan === 'pro' && subscription.isActive) ||
+              (plan.name === 'Team' && subscription.plan === 'team' && subscription.isActive);
+
+            const IconComponent = ICON_MAP[plan.icon];
 
             return (
               <div
@@ -84,6 +116,8 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                 className={`relative rounded-2xl p-6 border ${
                   plan.highlight
                     ? 'border-indigo-500 bg-indigo-950/30'
+                    : plan.name === 'Team'
+                    ? 'border-violet-500/50 bg-violet-950/20'
                     : 'border-slate-800 bg-slate-950'
                 }`}
               >
@@ -95,11 +129,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
 
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-2">
-                    {plan.name === 'Free' ? (
-                      <Shield className="w-5 h-5 text-slate-400" />
-                    ) : (
-                      <Zap className="w-5 h-5 text-indigo-400" />
-                    )}
+                    <IconComponent className={`w-5 h-5 ${plan.name === 'Free' ? 'text-slate-400' : plan.name === 'Team' ? 'text-violet-400' : 'text-indigo-400'}`} />
                     <h3 className="text-lg font-black text-white">{plan.name}</h3>
                   </div>
                   <div className="flex items-baseline gap-1">
@@ -124,7 +154,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                 </ul>
 
                 {isCurrentPlan ? (
-                  subscription.isActive && plan.name === 'Pro' ? (
+                  subscription.isActive && (plan.name === 'Pro' || plan.name === 'Team') ? (
                     <button
                       onClick={() => void onManage()}
                       className="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all"
@@ -140,7 +170,9 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                   <button
                     onClick={() => void handleUpgrade(plan.priceId!)}
                     disabled={upgrading}
-                    className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    className={`w-full px-4 py-3 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
+                      plan.name === 'Team' ? 'bg-violet-600 hover:bg-violet-500' : 'bg-indigo-600 hover:bg-indigo-500'
+                    }`}
                   >
                     {upgrading ? (
                       <>
@@ -148,7 +180,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                       </>
                     ) : (
                       <>
-                        <Zap className="w-4 h-4" /> {plan.cta}
+                        <IconComponent className="w-4 h-4" /> {plan.cta}
                       </>
                     )}
                   </button>

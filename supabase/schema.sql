@@ -103,6 +103,8 @@ create table if not exists public.subscriptions (
   stripe_subscription_id text unique,
   plan text not null check (plan in ('free', 'pro', 'team')),
   status text not null check (status in ('active', 'canceled', 'past_due', 'trialing')),
+  seat_count integer not null default 1,
+  organization_id uuid references public.organizations(id) on delete set null,
   current_period_end timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -7,7 +7,7 @@ import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent,
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, savePRReview, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
-import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit } from './services/stripeService';
+import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
 import type { SubscriptionStatus } from './services/stripeService';
 import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, SavedAnalysis, SavedPRReview, Workspace } from './types';
 import FileTree from './components/FileTree';
@@ -440,6 +440,12 @@ const App: React.FC = () => {
   const handleCreateWorkspace = async () => {
     if (!authUser) {
       addLog('Sign in first to create a workspace', 'warning');
+      return;
+    }
+
+    if (!canCreateTeamWorkspace(subscription)) {
+      addLog('Team workspaces require a Team plan ($99/mo)', 'warning');
+      setShowPricing(true);
       return;
     }
 
@@ -1592,9 +1598,13 @@ ${errorMessage}`);
                   {subscription.isActive ? (
                     <button
                       onClick={() => void openBillingPortal(authUser.id)}
-                      className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 hover:text-white"
+                      className={`flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                        subscription.plan === 'team'
+                          ? 'bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:text-white'
+                          : 'bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 hover:text-white'
+                      }`}
                     >
-                      <CreditCard className="w-4 h-4" /> Pro
+                      <CreditCard className="w-4 h-4" /> {subscription.plan === 'team' ? 'Team' : 'Pro'}
                     </button>
                   ) : (
                     <button

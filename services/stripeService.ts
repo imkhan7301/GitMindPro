@@ -95,10 +95,17 @@ export const openBillingPortal = async (userId: string): Promise<void> => {
   }
 };
 
-// Pro tier limits
-export const PRO_DAILY_LIMIT = 999;
+// Plan limits
 export const FREE_DAILY_LIMIT = 3;
+export const PRO_DAILY_LIMIT = 999;
+export const TEAM_DAILY_LIMIT = 999;
+export const TEAM_MAX_SEATS = 25;
 
 export const getEffectiveDailyLimit = (subscription: SubscriptionStatus): number => {
-  return subscription.isActive ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
+  if (!subscription.isActive) return FREE_DAILY_LIMIT;
+  return subscription.plan === 'team' ? TEAM_DAILY_LIMIT : PRO_DAILY_LIMIT;
+};
+
+export const canCreateTeamWorkspace = (subscription: SubscriptionStatus): boolean => {
+  return subscription.isActive && subscription.plan === 'team';
 };
