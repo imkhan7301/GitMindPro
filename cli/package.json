@@ -1,0 +1,19 @@
+{
+  "name": "gitmind",
+  "version": "1.0.0",
+  "description": "AI-powered code intelligence from your terminal. Analyze any GitHub repo instantly.",
+  "bin": {
+    "gitmind": "./bin/gitmind.cjs"
+  },
+  "keywords": ["github", "code-analysis", "ai", "code-quality", "developer-tools", "cli"],
+  "author": "GitMind Pro",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AaryanNarayworWorWorlds/GitMindPro"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": ["bin/"]
+}

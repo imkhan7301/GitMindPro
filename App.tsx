@@ -47,6 +47,7 @@ import BlameIntelligence from './components/BlameIntelligence';
 import PRReviewer from './components/PRReviewer';
 import TechDebtCalculator from './components/TechDebtCalculator';
 import CVEMonitor from './components/CVEMonitor';
+import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
 
@@ -403,6 +404,9 @@ const App: React.FC = () => {
   // Wave 13: CVE Monitor state
   const [cveReport, setCveReport] = useState<CVEReport | null>(null);
   const [cveLoading, setCveLoading] = useState(false);
+
+  // Wave 14: Interactive Demo Mode
+  const [demoMode, setDemoMode] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -1566,8 +1570,44 @@ const App: React.FC = () => {
     }
   };
 
+  // Wave 14: Load interactive demo with pre-baked facebook/react data
+  const handleLoadDemo = useCallback(() => {
+    setDemoMode(true);
+    setRepo(DEMO_REPO);
+    setStructure(DEMO_STRUCTURE);
+    setAnalysis(DEMO_ANALYSIS);
+    setDeepAudit(DEMO_DEEP_AUDIT);
+    setOnboardingGuide(DEMO_ONBOARDING);
+    setInsights(DEMO_INSIGHTS);
+    setBlameInsights(DEMO_BLAME_INSIGHTS);
+    setTechDebtReport(DEMO_TECH_DEBT);
+    setCveReport(DEMO_CVE_REPORT);
+    setActiveTab('intelligence');
+    addLog('🎮 Demo mode loaded — exploring facebook/react', 'success');
+    addNotification({ type: 'analysis_complete', title: 'Demo Loaded', message: 'Exploring facebook/react — try all tabs!' });
+  }, [addLog, addNotification]);
+
+  const handleExitDemo = useCallback(() => {
+    setDemoMode(false);
+    setRepo(null);
+    setStructure([]);
+    setAnalysis(null);
+    setDeepAudit(null);
+    setOnboardingGuide(null);
+    setInsights(null);
+    setBlameInsights(null);
+    setTechDebtReport(null);
+    setCveReport(null);
+    addLog('Exited demo mode', 'info');
+  }, [addLog]);
+
   const handleImport = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
+    // Exit demo mode if active
+    if (demoMode) {
+      setDemoMode(false);
+    }
 
     // Check free tier for non-authenticated users
     if (!authUser && !canUseFreeTier()) {
@@ -2826,6 +2866,32 @@ ${errorMessage}`);
         ) : repo && analysis ? (
           <div className="grid grid-cols-12 gap-4 sm:gap-6 xl:gap-12">
             
+            {/* Wave 14: Demo Mode Banner */}
+            {demoMode && (
+              <div className="col-span-12 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border border-indigo-500/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🎮</span>
+                  <div>
+                    <p className="text-white font-black text-sm">Demo Mode — Exploring facebook/react</p>
+                    <p className="text-indigo-300/70 text-xs">This is pre-loaded data. Analyze your own repo for live results!</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { handleExitDemo(); document.querySelector('input')?.focus(); }} className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-4 py-2 rounded-xl transition-all">
+                    Analyze Your Repo
+                  </button>
+                  {!authUser && (
+                    <button onClick={() => signInWithGitHub()} className="bg-slate-800 hover:bg-slate-700 text-white font-black text-xs px-4 py-2 rounded-xl transition-all border border-slate-700 flex items-center gap-1.5">
+                      <LogIn className="w-3 h-3" /> Sign In
+                    </button>
+                  )}
+                  <button onClick={handleExitDemo} className="text-slate-500 hover:text-white transition-colors p-1">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div className="col-span-12 xl:col-span-3 space-y-6 sm:space-y-10">
                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-10 backdrop-blur-3xl shadow-2xl relative overflow-hidden">
                   <h3 className="text-white font-black flex items-center gap-4 text-xl mb-10"><Layout className="w-6 h-6 text-indigo-400" /> File Explorer</h3>
@@ -2917,8 +2983,11 @@ ${errorMessage}`);
                         <>
                           <button
                             onClick={() => {
-                              const text = `Just analyzed ${repo.owner}/${repo.repo} with @GitMindPro — AI-powered code intelligence! 🚀`;
-                              window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent('https://gitmindpro.vercel.app')}`, '_blank', 'noopener');
+                              const sc = analysis.scorecard;
+                              const avgScore = ((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4).toFixed(1);
+                              const ogUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(`${repo.owner}/${repo.repo}`)}&score=${avgScore}&stack=${encodeURIComponent(analysis.techStack.slice(0, 5).join(','))}&plan=${subscription.plan}`;
+                              const text = `Just analyzed ${repo.owner}/${repo.repo} with @GitMindPro — Score: ${avgScore}/10 🚀\n\nAI-powered code intelligence in seconds.`;
+                              window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(ogUrl)}`, '_blank', 'noopener');
                             }}
                             className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
                             title="Share on X / Twitter"
@@ -2927,13 +2996,27 @@ ${errorMessage}`);
                           </button>
                           <button
                             onClick={() => {
-                              const text = `Just used GitMindPro to get an AI-powered code intelligence report on ${repo.owner}/${repo.repo}. Check it out!`;
-                              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://gitmindpro.vercel.app')}&summary=${encodeURIComponent(text)}`, '_blank', 'noopener');
+                              const sc = analysis.scorecard;
+                              const avgScore = ((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4).toFixed(1);
+                              const ogUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(`${repo.owner}/${repo.repo}`)}&score=${avgScore}&stack=${encodeURIComponent(analysis.techStack.slice(0, 5).join(','))}&plan=${subscription.plan}`;
+                              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(ogUrl)}`, '_blank', 'noopener');
                             }}
                             className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
                             title="Share on LinkedIn"
                           >
                             <Linkedin className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const sc = analysis.scorecard;
+                              const avgScore = ((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4).toFixed(1);
+                              const ogUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(`${repo.owner}/${repo.repo}`)}&score=${avgScore}&stack=${encodeURIComponent(analysis.techStack.slice(0, 5).join(','))}&plan=${subscription.plan}`;
+                              void copyToClipboard(ogUrl, 'shareable OG link');
+                            }}
+                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                            title="Copy shareable card link"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
                           </button>
                         </>
                       )}
@@ -4959,16 +5042,13 @@ ${errorMessage}`);
                   Analyze a Repo — Free
                 </button>
                 <button
-                  onClick={() => {
-                    setUrl('https://github.com/facebook/react');
-                    setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100);
-                  }}
+                  onClick={handleLoadDemo}
                   className="bg-slate-800 hover:bg-slate-700 text-white font-black py-4 sm:py-5 px-8 sm:px-14 rounded-2xl sm:rounded-3xl transition-all border border-slate-700 text-base sm:text-lg w-full sm:w-auto"
                 >
-                  Try Demo — React
+                  Try Demo — Instant ⚡
                 </button>
               </div>
-              <p className="text-slate-600 text-sm">Free for 3 analyses • No signup required • Results in ~60 seconds</p>
+              <p className="text-slate-600 text-sm">Free for 3 analyses • No signup required • Demo loads instantly</p>
             </div>
 
             {/* Works With Bar */}
@@ -5116,7 +5196,7 @@ ${errorMessage}`);
       {cmdPaletteOpen && (() => {
         const actions = [
           { id: 'new', label: 'New Analysis', desc: 'Paste a GitHub URL', icon: Plus, action: () => { setCmdPaletteOpen(false); document.querySelector('input')?.focus(); } },
-          { id: 'demo', label: 'Try Demo — React', desc: 'Analyze facebook/react', icon: Rocket, action: () => { setCmdPaletteOpen(false); setUrl('https://github.com/facebook/react'); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100); } },
+          { id: 'demo', label: 'Try Demo — React', desc: 'Explore facebook/react instantly', icon: Rocket, action: () => { setCmdPaletteOpen(false); handleLoadDemo(); } },
           { id: 'theme', label: theme === 'dark' ? 'Light Mode' : 'Dark Mode', desc: 'Toggle theme', icon: theme === 'dark' ? Sun : Moon, action: () => { setCmdPaletteOpen(false); toggleTheme(); } },
           { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View all shortcuts', icon: Zap, action: () => { setCmdPaletteOpen(false); setShowShortcuts(true); } },
           { id: 'settings', label: 'Settings', desc: 'Theme, notifications, API keys', icon: Settings, action: () => { setCmdPaletteOpen(false); setShowSettings(true); } },
