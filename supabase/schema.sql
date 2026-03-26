@@ -96,6 +96,35 @@ create index if not exists idx_pr_reviews_org_created on public.pr_reviews(organ
 
 alter table public.pr_reviews enable row level security;
 
+create table if not exists public.subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  stripe_customer_id text,
+  stripe_subscription_id text unique,
+  plan text not null check (plan in ('free', 'pro', 'team')),
+  status text not null check (status in ('active', 'canceled', 'past_due', 'trialing')),
+  current_period_end timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_subscriptions_user on public.subscriptions(user_id);
+create index if not exists idx_subscriptions_stripe_customer on public.subscriptions(stripe_customer_id);
+
+alter table public.subscriptions enable row level security;
+
+create policy if not exists "subscriptions_select_own"
+  on public.subscriptions for select
+  using (auth.uid() = user_id);
+
+create policy if not exists "subscriptions_upsert_service"
+  on public.subscriptions for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "subscriptions_update_own"
+  on public.subscriptions for update
+  using (auth.uid() = user_id);
+
 create policy if not exists "pr_reviews_select_own"
   on public.pr_reviews for select
   using (

@@ -545,3 +545,21 @@ export const getPRReviewHistory = async (params: {
     createdAt: row.created_at as string,
   }));
 };
+
+export interface SubscriptionRow {
+  plan: 'free' | 'pro' | 'team';
+  status: 'active' | 'canceled' | 'past_due' | 'trialing';
+  current_period_end: string | null;
+}
+
+export async function getUserSubscription(userId: string): Promise<SubscriptionRow | null> {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('plan, status, current_period_end')
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data) return null;
+  return data as SubscriptionRow;
+}

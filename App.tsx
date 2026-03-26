@@ -7,12 +7,15 @@ import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent,
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, savePRReview, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
+import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit } from './services/stripeService';
+import type { SubscriptionStatus } from './services/stripeService';
 import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, SavedAnalysis, SavedPRReview, Workspace } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
 import AnalysisHistory from './components/AnalysisHistory';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck } from 'lucide-react';
+import PricingModal from './components/PricingModal';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -124,7 +127,6 @@ const App: React.FC = () => {
   const appEnv = (import.meta.env.VITE_APP_ENV || import.meta.env.VITE_ENV || 'DEV').toString().toUpperCase();
   const fastModeFlag = (import.meta.env.VITE_FAST_MODE ?? '').toString().toLowerCase();
   const authEnabled = isAuthConfigured();
-  const freeDailyAnalysisLimit = Number(import.meta.env.VITE_FREE_DAILY_ANALYSIS_LIMIT ?? 3);
   const fastMode = fastModeFlag === 'true' || fastModeFlag === '1';
   const maxTreeEntriesEnv = Number(import.meta.env.VITE_FAST_MODE_MAX_ENTRIES ?? 1500);
   const maxTreeEntries = Number.isFinite(maxTreeEntriesEnv) && maxTreeEntriesEnv > 0
@@ -178,6 +180,11 @@ const App: React.FC = () => {
   // PR review history state
   const [prReviewHistory, setPrReviewHistory] = useState<SavedPRReview[]>([]);
   const [prHistoryLoading, setPrHistoryLoading] = useState(false);
+
+  // Subscription state
+  const [subscription, setSubscription] = useState<SubscriptionStatus>({ plan: 'free', status: 'none', currentPeriodEnd: null, isActive: false });
+  const [showPricing, setShowPricing] = useState(false);
+  const freeDailyAnalysisLimit = getEffectiveDailyLimit(subscription);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -372,6 +379,9 @@ const App: React.FC = () => {
             addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
           });
           await loadUserWorkspaces(user);
+          // Load subscription status
+          const sub = await getSubscriptionStatus(user.id).catch(() => ({ plan: 'free' as const, status: 'none' as const, currentPeriodEnd: null, isActive: false }));
+          setSubscription(sub);
         }
       } catch (err) {
         addLog(`Auth session init failed: ${getErrorText(err)}`, 'error');
@@ -392,6 +402,9 @@ const App: React.FC = () => {
             addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
           });
           await loadUserWorkspaces(user);
+          // Load subscription status
+          const sub = await getSubscriptionStatus(user.id).catch(() => subscription);
+          setSubscription(sub);
         })();
       } else {
         setWorkspaces([]);
@@ -405,6 +418,24 @@ const App: React.FC = () => {
       unsubscribe();
     };
   }, [authEnabled, addLog, loadUserWorkspaces]);
+
+  // Handle Stripe checkout return
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkoutStatus = params.get('checkout');
+    if (checkoutStatus === 'success') {
+      addLog('🎉 Subscription activated! Welcome to Pro.', 'success');
+      clearSubscriptionCache();
+      if (authUser) {
+        void getSubscriptionStatus(authUser.id).then(setSubscription);
+      }
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (checkoutStatus === 'canceled') {
+      addLog('Checkout canceled.', 'info');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [authUser, addLog]);
 
   const handleCreateWorkspace = async () => {
     if (!authUser) {
@@ -453,6 +484,8 @@ const App: React.FC = () => {
     setAuthBusy(true);
     try {
       await signOutAuth();
+      clearSubscriptionCache();
+      setSubscription({ plan: 'free', status: 'none', currentPeriodEnd: null, isActive: false });
       addLog('Signed out successfully', 'success');
     } catch (err) {
       addLog(`Sign-out failed: ${getErrorText(err)}`, 'error');
@@ -751,7 +784,10 @@ const App: React.FC = () => {
           const usage = await canAnalyzeToday(authUser.id, freeDailyAnalysisLimit);
           if (!usage.allowed) {
             addLog(`Daily analysis limit reached (${usage.usedToday}/${usage.limit})`, 'error');
-            alert(`Daily free limit reached: ${usage.usedToday}/${usage.limit}. Please try again tomorrow or upgrade.`);
+            if (!subscription.isActive) {
+              setShowPricing(true);
+            }
+            alert(`Daily limit reached: ${usage.usedToday}/${usage.limit}. ${subscription.isActive ? 'Please try again tomorrow.' : 'Upgrade to Pro for unlimited analyses!'}`);
             return;
           }
           addLog(`Daily usage: ${usage.usedToday}/${usage.limit} analyses used`, 'info');
@@ -1553,6 +1589,21 @@ ${errorMessage}`);
                   <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">
                     {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
                   </span>
+                  {subscription.isActive ? (
+                    <button
+                      onClick={() => void openBillingPortal(authUser.id)}
+                      className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 hover:text-white"
+                    >
+                      <CreditCard className="w-4 h-4" /> Pro
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowPricing(true)}
+                      className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:text-white animate-pulse"
+                    >
+                      <Zap className="w-4 h-4" /> Upgrade
+                    </button>
+                  )}
                   <button
                     onClick={handleSignOut}
                     disabled={authBusy}
@@ -3265,6 +3316,20 @@ ${errorMessage}`);
             </p>
           </div>
         </div>
+      )}
+
+      {/* Pricing Modal */}
+      {showPricing && authUser && (
+        <PricingModal
+          subscription={subscription}
+          onClose={() => setShowPricing(false)}
+          onUpgrade={async (priceId) => {
+            await startCheckout({ priceId, userId: authUser.id, email: authUser.email || '' });
+          }}
+          onManage={async () => {
+            await openBillingPortal(authUser.id);
+          }}
+        />
       )}
 
       <div className={`fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 transition-all duration-500 z-[100] ${isTerminalOpen ? 'h-[400px]' : 'h-14'}`}>
