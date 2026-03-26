@@ -26,6 +26,8 @@ import TrendChart from './components/TrendChart';
 import SettingsPanel from './components/SettingsPanel';
 import AnalysisDiff from './components/AnalysisDiff';
 import BadgeEmbed from './components/BadgeEmbed';
+import ChangelogModal, { CHANGELOG_VERSION } from './components/ChangelogModal';
+import WebhookFeed from './components/WebhookFeed';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings } from 'lucide-react';
 
@@ -322,6 +324,7 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showBadgeEmbed, setShowBadgeEmbed] = useState(false);
   const [showAnalysisDiff, setShowAnalysisDiff] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -676,6 +679,15 @@ const App: React.FC = () => {
       unsubscribe();
     };
   }, [authEnabled, addLog, loadUserWorkspaces]);
+
+  // Auto-show changelog for returning users who haven't seen this version
+  useEffect(() => {
+    const lastSeen = localStorage.getItem('gitmind.changelogVersion');
+    if (lastSeen && lastSeen !== CHANGELOG_VERSION) {
+      setShowChangelog(true);
+    }
+    localStorage.setItem('gitmind.changelogVersion', CHANGELOG_VERSION);
+  }, []);
 
   // Cmd+K command palette shortcut + ? for shortcuts
   useEffect(() => {
@@ -2047,6 +2059,13 @@ ${errorMessage}`);
                     title="Settings"
                   >
                     <Settings className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowChangelog(true)}
+                    className="flex items-center gap-2 px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300"
+                    title="What's New"
+                  >
+                    <Sparkles className="w-4 h-4" />
                   </button>
                   <button
                     onClick={handleSignOut}
@@ -3862,6 +3881,13 @@ ${errorMessage}`);
               </div>
             )}
 
+            {/* Webhook Activity Feed */}
+            {authUser && watchedRepos.size > 0 && (
+              <div className="mb-10">
+                <WebhookFeed userId={authUser.id} />
+              </div>
+            )}
+
             {/* Recent Analyses */}
             {(analysisHistory.length > 0 || historyLoading) && (
               <div className="mb-10">
@@ -4084,6 +4110,7 @@ ${errorMessage}`);
           { id: 'theme', label: theme === 'dark' ? 'Light Mode' : 'Dark Mode', desc: 'Toggle theme', icon: theme === 'dark' ? Sun : Moon, action: () => { setCmdPaletteOpen(false); toggleTheme(); } },
           { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View all shortcuts', icon: Zap, action: () => { setCmdPaletteOpen(false); setShowShortcuts(true); } },
           { id: 'settings', label: 'Settings', desc: 'Theme, notifications, API keys', icon: Settings, action: () => { setCmdPaletteOpen(false); setShowSettings(true); } },
+          { id: 'changelog', label: "What's New", desc: 'Latest features and updates', icon: Sparkles, action: () => { setCmdPaletteOpen(false); setShowChangelog(true); } },
           ...(analysisHistory.length >= 2 ? [{ id: 'diff', label: 'Analysis Diff', desc: 'Compare analyses over time', icon: BarChart3, action: () => { setCmdPaletteOpen(false); setShowAnalysisDiff(true); } }] : []),
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
           { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
@@ -4240,6 +4267,11 @@ ${errorMessage}`);
           analyses={analysisHistory}
           onClose={() => setShowAnalysisDiff(false)}
         />
+      )}
+
+      {/* Changelog / What's New */}
+      {showChangelog && (
+        <ChangelogModal onClose={() => setShowChangelog(false)} />
       )}
 
       {/* Keyboard Shortcuts Overlay */}

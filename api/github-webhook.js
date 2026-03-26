@@ -1,8 +1,14 @@
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 /**
  * Vercel serverless: receives GitHub App webhook events.
- * Verifies webhook signature, then processes relevant events.
+ * Verifies webhook signature, logs events to DB, then processes.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -47,6 +53,30 @@ export default async function handler(req, res) {
 
     default:
       console.log(`Unhandled GitHub event: ${event}`);
+  }
+
+  // Log event to DB for webhook feed
+  const repo = payload.repository?.full_name || '';
+  const action = payload.action || '';
+  const sender = payload.sender?.login || '';
+  let payloadSummary = '';
+
+  if (event === 'push') {
+    payloadSummary = `${payload.commits?.length ?? 0} commit(s) to ${payload.ref?.replace('refs/heads/', '')}`;
+  } else if (event === 'pull_request') {
+    payloadSummary = `${action}: ${payload.pull_request?.title || ''}`;
+  } else if (event === 'issues') {
+    payloadSummary = `${action}: ${payload.issue?.title || ''}`;
+  }
+
+  if (repo) {
+    await supabase.from('webhook_events').insert({
+      event_type: event,
+      repo,
+      action,
+      sender,
+      payload_summary: payloadSummary.slice(0, 500),
+    }).catch(() => { /* table may not exist yet */ });
   }
 
   return res.status(200).json({ received: true, event });

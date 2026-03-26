@@ -624,3 +624,20 @@ create table if not exists public.api_usage_logs (
 
 create index if not exists idx_api_usage_key_created on public.api_usage_logs(api_key_id, created_at desc);
 create index if not exists idx_api_usage_user_created on public.api_usage_logs(user_id, created_at desc);
+
+-- ─── Webhook Events ─────────────────────────────────────────
+create table if not exists public.webhook_events (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  repo text not null,
+  action text,
+  sender text,
+  payload_summary text,
+  raw_headers jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_webhook_events_repo on public.webhook_events(repo, created_at desc);
+
+-- Auto-purge old webhook events (keep 30 days)
+-- Run: DELETE FROM public.webhook_events WHERE created_at < now() - interval '30 days';

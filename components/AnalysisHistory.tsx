@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SavedAnalysis } from '../types';
 import { Activity } from 'lucide-react';
+import Sparkline from './Sparkline';
 
 interface AnalysisHistoryProps {
   analyses: SavedAnalysis[];
@@ -23,6 +24,21 @@ const timeAgo = (dateStr: string): string => {
 };
 
 const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ analyses, loading, onSelect, favorites = [], onToggleFavorite }) => {
+  // Build sparkline data: group scores by repo key, oldest → newest
+  const sparklineMap = useMemo(() => {
+    const map: Record<string, number[]> = {};
+    // analyses are newest-first, we need oldest-first for sparkline
+    const sorted = [...analyses].reverse();
+    for (const a of sorted) {
+      if (!a.scorecard) continue;
+      const key = `${a.repoOwner}/${a.repoName}`;
+      const avg = (a.scorecard.maintenance + a.scorecard.documentation + a.scorecard.innovation + a.scorecard.security) / 4;
+      if (!map[key]) map[key] = [];
+      map[key].push(avg);
+    }
+    return map;
+  }, [analyses]);
+
   if (loading) {
     return (
       <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8">
@@ -73,6 +89,19 @@ const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ analyses, loading, on
                     className={`text-sm cursor-pointer hover:scale-110 transition-transform ${favorites.includes(a.repoUrl) ? 'text-amber-400' : 'text-slate-700 hover:text-amber-400'}`}
                     title={favorites.includes(a.repoUrl) ? 'Unpin' : 'Pin to dashboard'}
                   >{favorites.includes(a.repoUrl) ? '★' : '☆'}</span>
+                )}
+                {sparklineMap[`${a.repoOwner}/${a.repoName}`]?.length >= 2 && (
+                  <Sparkline
+                    values={sparklineMap[`${a.repoOwner}/${a.repoName}`]}
+                    width={64}
+                    height={20}
+                    className="opacity-60 group-hover:opacity-100 transition-opacity"
+                  />
+                )}
+                {a.scorecard && (
+                  <span className="text-[10px] font-black text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                    {((a.scorecard.maintenance + a.scorecard.documentation + a.scorecard.innovation + a.scorecard.security) / 4).toFixed(1)}
+                  </span>
                 )}
                 <span className="text-[10px] text-slate-600 font-mono">{timeAgo(a.createdAt)}</span>
               </div>
