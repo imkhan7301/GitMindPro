@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks, analyzeDependencyIntelligence, detectBreakingChanges, predictPRMerge, generateAIBOM, scanSupplyChain } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks, analyzeDependencyIntelligence, detectBreakingChanges, predictPRMerge, generateAIBOM, scanSupplyChain, detectDeadCode, runInvariantCheck, generateRefactoringPlan, generateSectionConfidence } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -78,6 +78,14 @@ import AIBOMGenerator from './components/AIBOMGenerator';
 import type { AIBOMReport } from './components/AIBOMGenerator';
 import SupplyChainScanner from './components/SupplyChainScanner';
 import type { SupplyChainScanResult } from './components/SupplyChainScanner';
+import DeadCodeDetector from './components/DeadCodeDetector';
+import type { DeadCodeReport } from './components/DeadCodeDetector';
+import InvariantChecker from './components/InvariantChecker';
+import type { InvariantCheckResult } from './components/InvariantChecker';
+import RefactoringAdvisor from './components/RefactoringAdvisor';
+import type { RefactoringPlan } from './components/RefactoringAdvisor';
+import SectionConfidencePanel from './components/SectionConfidencePanel';
+import type { SectionConfidenceReport } from './components/SectionConfidencePanel';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
@@ -480,6 +488,12 @@ const App: React.FC = () => {
   const [prPredictLoading, setPrPredictLoading] = useState(false);
   const [aibomLoading, setAibomLoading] = useState(false);
   const [supplyChainLoading, setSupplyChainLoading] = useState(false);
+  // Wave 20 state
+  const [deadCodeLoading, setDeadCodeLoading] = useState(false);
+  const [invariantLoading, setInvariantLoading] = useState(false);
+  const [refactorLoading, setRefactorLoading] = useState(false);
+  const [sectionConfLoading, setSectionConfLoading] = useState(false);
+  const [sectionConfReport, setSectionConfReport] = useState<SectionConfidenceReport | null>(null);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -1323,6 +1337,99 @@ const App: React.FC = () => {
       setSupplyChainLoading(false);
     }
   }, [analysis, repo, structure, deepAudit, addLog]);
+
+  // Wave 20: Dead Code Detector handler
+  const handleDetectDeadCode = useCallback(async (): Promise<DeadCodeReport> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setDeadCodeLoading(true);
+    try {
+      const allPaths = structure.flatMap(function flatPaths(n: FileNode): string[] {
+        return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+      });
+      const result = await detectDeadCode({
+        repoName: `${repo.owner}/${repo.repo}`,
+        fileTree: allPaths,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+      });
+      addLog(`Dead code scan: ${result.totalItems} items found (${result.estimatedWastePercent}% waste)`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Dead code scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setDeadCodeLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 20: Invariant Checker handler
+  const handleRunInvariantCheck = useCallback(async (): Promise<InvariantCheckResult> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setInvariantLoading(true);
+    try {
+      const sections = ['Learning Path', 'Hot Zones', 'Security Insights', 'Code Ownership', 'Architecture', 'Tech Debt'];
+      const result = await runInvariantCheck({
+        repoName: `${repo.owner}/${repo.repo}`,
+        analysisSummary: analysis.summary,
+        techStack: analysis.techStack,
+        sections,
+      });
+      addLog(`Invariant check: ${result.status} — ${result.reason.slice(0, 60)}`, result.status === 'PASS' ? 'success' : 'error');
+      return result;
+    } catch (err) {
+      addLog(`Invariant check failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setInvariantLoading(false);
+    }
+  }, [analysis, repo, addLog]);
+
+  // Wave 20: Refactoring Advisor handler
+  const handleGenerateRefactoringPlan = useCallback(async (): Promise<RefactoringPlan> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setRefactorLoading(true);
+    try {
+      const allPaths = structure.flatMap(function flatPaths(n: FileNode): string[] {
+        return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+      });
+      const result = await generateRefactoringPlan({
+        repoName: `${repo.owner}/${repo.repo}`,
+        fileTree: allPaths,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+      });
+      addLog(`Refactoring plan: ${result.items.length} opportunities, ${result.totalEstimatedHours}h total`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Refactoring plan failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setRefactorLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 20: Section Confidence Scores handler
+  const handleGenerateSectionConfidence = useCallback(async (): Promise<void> => {
+    if (!analysis || !repo) return;
+    setSectionConfLoading(true);
+    try {
+      const result = await generateSectionConfidence({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+        fileCount: structure.length,
+        hasContributors: true,
+        hasIssues: true,
+        hasReadme: true,
+      });
+      setSectionConfReport(result);
+      addLog(`Section confidence: ${result.overallConfidence}% overall`, 'success');
+    } catch (err) {
+      addLog(`Section confidence failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    } finally {
+      setSectionConfLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
 
   const handleGetFix = useCallback(async (findingKey: string, params: {
     file: string; title: string; rationale: string; recommendation: string;
@@ -4655,23 +4762,76 @@ ${errorMessage}`);
                         repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
                       />
                     </div>
+
+                    {/* Wave 20: Invariant Checker (ASI01/ASI04 guard) */}
+                    <div className="mt-8">
+                      <InvariantChecker
+                        onCheck={handleRunInvariantCheck}
+                        loading={invariantLoading}
+                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                        goal={repo ? `Analyze and provide structured intelligence for ${repo.owner}/${repo.repo}` : undefined}
+                      />
+                    </div>
+
+                    {/* Wave 20: Dead Code Detector */}
+                    <div className="mt-8">
+                      <DeadCodeDetector
+                        onAnalyze={handleDetectDeadCode}
+                        loading={deadCodeLoading}
+                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                      />
+                    </div>
+
+                    {/* Wave 20: Section Confidence Panel */}
+                    {sectionConfReport && (
+                      <div className="mt-8">
+                        <SectionConfidencePanel report={sectionConfReport} />
+                      </div>
+                    )}
+                    {!sectionConfReport && (
+                      <div className="mt-8">
+                        <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-8 shadow-2xl">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <h3 className="text-lg font-black text-white flex items-center gap-2 mb-1">Analysis Confidence Scores</h3>
+                              <p className="text-slate-400 text-sm">Generate per-section confidence scores with data source attribution.</p>
+                            </div>
+                            <button
+                              onClick={() => void handleGenerateSectionConfidence()}
+                              disabled={sectionConfLoading || !analysis}
+                              className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 rounded-xl text-sm font-bold text-white transition-all"
+                            >
+                              {sectionConfLoading ? 'Generating...' : 'Generate Scores'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                  </div>
                )}
 
                {activeTab === 'lab' && (
-                 <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl animate-in zoom-in-95 duration-500 min-h-[600px]">
-                    <h2 className="text-3xl font-black text-white tracking-tighter mb-12 flex items-center gap-4"><FlaskConical className="w-8 h-8 text-indigo-400" /> Engineering Lab</h2>
-                    {labLoading ? <Loader message="Synthesizing changes..." /> : labResult ? (
-                       <div className="space-y-8">
-                          <pre className="p-8 bg-slate-950 rounded-[2rem] border border-slate-800 overflow-x-auto text-xs text-indigo-400"><code>{labResult}</code></pre>
-                          <button onClick={() => setLabResult(null)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white">Clear Lab Output</button>
-                       </div>
-                    ) : (
-                       <div className="flex-grow flex flex-col items-center justify-center opacity-30 h-[400px] text-center">
-                          <Rocket className="w-20 h-20 mb-8 text-slate-700" />
-                          <p className="text-lg font-black uppercase tracking-widest text-slate-600">Select a file from the explorer to begin synthesis.</p>
-                       </div>
-                    )}
+                 <div className="space-y-8 animate-in zoom-in-95 duration-500">
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl min-h-[400px]">
+                      <h2 className="text-3xl font-black text-white tracking-tighter mb-12 flex items-center gap-4"><FlaskConical className="w-8 h-8 text-indigo-400" /> Engineering Lab</h2>
+                      {labLoading ? <Loader message="Synthesizing changes..." /> : labResult ? (
+                         <div className="space-y-8">
+                            <pre className="p-8 bg-slate-950 rounded-[2rem] border border-slate-800 overflow-x-auto text-xs text-indigo-400"><code>{labResult}</code></pre>
+                            <button onClick={() => setLabResult(null)} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white">Clear Lab Output</button>
+                         </div>
+                      ) : (
+                         <div className="flex-grow flex flex-col items-center justify-center opacity-30 h-[300px] text-center">
+                            <Rocket className="w-20 h-20 mb-8 text-slate-700" />
+                            <p className="text-lg font-black uppercase tracking-widest text-slate-600">Select a file from the explorer to begin synthesis.</p>
+                         </div>
+                      )}
+                   </div>
+                   {/* Wave 20: Refactoring Advisor */}
+                   <RefactoringAdvisor
+                     onGenerate={handleGenerateRefactoringPlan}
+                     loading={refactorLoading}
+                     repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                   />
                  </div>
                )}
 

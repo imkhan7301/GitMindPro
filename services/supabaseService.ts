@@ -56,8 +56,15 @@ export const signOutAuth = async (): Promise<void> => {
 
 export const getCurrentUser = async (): Promise<User | null> => {
   const supabase = getClient();
+  // First check if a session exists — avoids throwing on unauthenticated users
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session) return null;
   const { data, error } = await supabase.auth.getUser();
   if (error) {
+    // Auth session missing is expected when not logged in — treat as null
+    if (error.message?.includes('Auth session missing') || error.message?.includes('session_not_found')) {
+      return null;
+    }
     throw new Error(`Failed to fetch session user: ${error.message}`);
   }
   return data.user ?? null;
