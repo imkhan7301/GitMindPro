@@ -3300,3 +3300,164 @@ For each section include the data sources used. Be honest — sparse repos get l
     })),
   };
 };
+
+// ─── Wave 21: Performance Intelligence ───────────────────────────────────────
+
+interface BundleRiskItemData {
+  module: string;
+  issue: string;
+  impact: 'high' | 'medium' | 'low';
+  saving: string;
+  fix: string;
+}
+
+interface CWVRiskData {
+  metric: 'LCP' | 'CLS' | 'INP' | 'FID' | 'TTFB';
+  risk: 'high' | 'medium' | 'low';
+  reason: string;
+  score: number;
+}
+
+interface RenderItemData {
+  component: string;
+  depth: number;
+  rerenderRisk: 'high' | 'medium' | 'low';
+  cause: string;
+  fix: string;
+}
+
+export interface PerformanceReportData {
+  bundleRiskScore: number;
+  cwvScore: number;
+  renderScore: number;
+  overallGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  summary: string;
+  topWin: string;
+  bundleItems: BundleRiskItemData[];
+  cwvRisks: CWVRiskData[];
+  renderItems: RenderItemData[];
+}
+
+export async function analyzePerformance({
+  repoName,
+  fileTree,
+  techStack,
+  summary,
+}: {
+  repoName: string;
+  fileTree: string;
+  techStack: string[];
+  summary: string;
+}): Promise<PerformanceReportData> {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('analyzePerformance');
+
+  const request = {
+    contents: {
+      parts: [
+        {
+          text:
+            `You are a senior performance engineer reviewing ${repoName}.\n` +
+            `Tech stack: ${techStack.join(', ')}\n` +
+            `File tree (excerpt):\n${fileTree.slice(0, 4000)}\n\n` +
+            `Analysis summary:\n${summary.slice(0, 2000)}\n\n` +
+            `Return a performance intelligence report. Be specific — reference real filenames and packages from the project. ` +
+            `bundleRiskScore, cwvScore, renderScore are 0-100 (higher = better). ` +
+            `overallGrade is A/B/C/D/F based on average. ` +
+            `bundleItems: 3-6 bundle issues (tree-shaking gaps, large dependencies, missing dynamic imports). ` +
+            `cwvRisks: assess LCP, CLS, INP, TTFB, FID risk based on code patterns. ` +
+            `renderItems: 3-5 components with high re-render risk. ` +
+            `topWin: the single highest-ROI improvement action.`,
+        },
+      ],
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          bundleRiskScore: { type: Type.NUMBER },
+          cwvScore: { type: Type.NUMBER },
+          renderScore: { type: Type.NUMBER },
+          overallGrade: { type: Type.STRING },
+          summary: { type: Type.STRING },
+          topWin: { type: Type.STRING },
+          bundleItems: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                module: { type: Type.STRING },
+                issue: { type: Type.STRING },
+                impact: { type: Type.STRING },
+                saving: { type: Type.STRING },
+                fix: { type: Type.STRING },
+              },
+              required: ['module', 'issue', 'impact', 'saving', 'fix'],
+            },
+          },
+          cwvRisks: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                metric: { type: Type.STRING },
+                risk: { type: Type.STRING },
+                reason: { type: Type.STRING },
+                score: { type: Type.NUMBER },
+              },
+              required: ['metric', 'risk', 'reason', 'score'],
+            },
+          },
+          renderItems: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                component: { type: Type.STRING },
+                depth: { type: Type.NUMBER },
+                rerenderRisk: { type: Type.STRING },
+                cause: { type: Type.STRING },
+                fix: { type: Type.STRING },
+              },
+              required: ['component', 'depth', 'rerenderRisk', 'cause', 'fix'],
+            },
+          },
+        },
+        required: ['bundleRiskScore', 'cwvScore', 'renderScore', 'overallGrade', 'summary', 'topWin', 'bundleItems', 'cwvRisks', 'renderItems'],
+      },
+    },
+  };
+
+  const response = await generateContentWithFallback(ai, request, 'analyzePerformance');
+  const parsed = JSON.parse(response.text || '{}');
+  const clamp = (v: number) => Math.min(100, Math.max(0, v || 70));
+  return {
+    bundleRiskScore: clamp(parsed.bundleRiskScore),
+    cwvScore: clamp(parsed.cwvScore),
+    renderScore: clamp(parsed.renderScore),
+    overallGrade: (['A', 'B', 'C', 'D', 'F'].includes(parsed.overallGrade) ? parsed.overallGrade : 'C') as PerformanceReportData['overallGrade'],
+    summary: parsed.summary || '',
+    topWin: parsed.topWin || '',
+    bundleItems: (parsed.bundleItems || []).map((b: BundleRiskItemData) => ({
+      module: b.module || '',
+      issue: b.issue || '',
+      impact: (['high', 'medium', 'low'].includes(b.impact) ? b.impact : 'medium') as BundleRiskItemData['impact'],
+      saving: b.saving || '',
+      fix: b.fix || '',
+    })),
+    cwvRisks: (parsed.cwvRisks || []).map((c: CWVRiskData) => ({
+      metric: (['LCP', 'CLS', 'INP', 'FID', 'TTFB'].includes(c.metric) ? c.metric : 'LCP') as CWVRiskData['metric'],
+      risk: (['high', 'medium', 'low'].includes(c.risk) ? c.risk : 'medium') as CWVRiskData['risk'],
+      reason: c.reason || '',
+      score: clamp(c.score),
+    })),
+    renderItems: (parsed.renderItems || []).map((r: RenderItemData) => ({
+      component: r.component || '',
+      depth: r.depth || 1,
+      rerenderRisk: (['high', 'medium', 'low'].includes(r.rerenderRisk) ? r.rerenderRisk : 'medium') as RenderItemData['rerenderRisk'],
+      cause: r.cause || '',
+      fix: r.fix || '',
+    })),
+  };
+};

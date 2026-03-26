@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks, analyzeDependencyIntelligence, detectBreakingChanges, predictPRMerge, generateAIBOM, scanSupplyChain, detectDeadCode, runInvariantCheck, generateRefactoringPlan, generateSectionConfidence } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks, analyzeDependencyIntelligence, detectBreakingChanges, predictPRMerge, generateAIBOM, scanSupplyChain, detectDeadCode, runInvariantCheck, generateRefactoringPlan, generateSectionConfidence, analyzePerformance } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -86,6 +86,10 @@ import RefactoringAdvisor from './components/RefactoringAdvisor';
 import type { RefactoringPlan } from './components/RefactoringAdvisor';
 import SectionConfidencePanel from './components/SectionConfidencePanel';
 import type { SectionConfidenceReport } from './components/SectionConfidencePanel';
+import PerformancePack from './components/PerformancePack';
+import type { PerformanceReport } from './components/PerformancePack';
+import MultiRepoHealthMatrix from './components/MultiRepoHealthMatrix';
+import SmartUpgradeNudge from './components/SmartUpgradeNudge';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
@@ -493,6 +497,8 @@ const App: React.FC = () => {
   const [invariantLoading, setInvariantLoading] = useState(false);
   const [refactorLoading, setRefactorLoading] = useState(false);
   const [sectionConfLoading, setSectionConfLoading] = useState(false);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [sectionConfReport, setSectionConfReport] = useState<SectionConfidenceReport | null>(null);
 
   // Notifications state (localStorage-backed)
@@ -1428,6 +1434,28 @@ const App: React.FC = () => {
       addLog(`Section confidence failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
     } finally {
       setSectionConfLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 21: Performance Intelligence handler
+  const handleAnalyzePerformance = useCallback(async (): Promise<PerformanceReport> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setPerformanceLoading(true);
+    try {
+      const fileTreeStr = structure.slice(0, 150).map((n) => n.path).join('\n');
+      const result = await analyzePerformance({
+        repoName: `${repo.owner}/${repo.repo}`,
+        fileTree: fileTreeStr,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+      });
+      addLog(`Performance grade: ${result.overallGrade} (bundle ${result.bundleRiskScore}, CWV ${result.cwvScore})`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Performance analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setPerformanceLoading(false);
     }
   }, [analysis, repo, structure, addLog]);
 
@@ -3950,6 +3978,17 @@ ${errorMessage}`);
                          )}
                       </div>
                     )}
+
+                    {/* Wave 21: Smart Upgrade Nudge (free tier, after analysis) */}
+                    {analysis && dailyUsage && !nudgeDismissed && subscription.plan === 'free' && (
+                      <SmartUpgradeNudge
+                        used={dailyUsage.used}
+                        limit={dailyUsage.limit}
+                        plan={subscription.plan}
+                        onUpgrade={() => setShowPricing(true)}
+                        onDismiss={() => setNudgeDismissed(true)}
+                      />
+                    )}
                  </div>
                )}
 
@@ -4807,6 +4846,15 @@ ${errorMessage}`);
                         </div>
                       </div>
                     )}
+
+                    {/* Wave 21: Performance Intelligence */}
+                    <div className="mt-8">
+                      <PerformancePack
+                        onAnalyze={handleAnalyzePerformance}
+                        loading={performanceLoading}
+                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                      />
+                    </div>
                  </div>
                )}
 
@@ -5742,6 +5790,34 @@ ${errorMessage}`);
               </div>
             )}
 
+            {/* Wave 21: Portfolio Health Matrix */}
+            {analysisHistory.length >= 2 && (
+              <div className="mb-10">
+                <MultiRepoHealthMatrix
+                  analyses={analysisHistory.map(a => ({
+                    id: a.id,
+                    repo_owner: a.repoOwner,
+                    repo_name: a.repoName,
+                    created_at: a.createdAt,
+                    scorecard: a.scorecard ? {
+                      maintenance: a.scorecard.maintenance,
+                      documentation: a.scorecard.documentation,
+                      innovation: a.scorecard.innovation,
+                      security: a.scorecard.security,
+                    } : undefined,
+                  }))}
+                  onDrillDown={(a) => {
+                    const match = analysisHistory.find(h => h.repoOwner === a.repo_owner && h.repoName === a.repo_name);
+                    if (match) {
+                      setUrl(match.repoUrl);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  }}
+                  onRefresh={() => authUser && void loadAnalysisHistory(authUser.id, activeWorkspaceId || undefined)}
+                />
+              </div>
+            )}
+
             {/* Score Trends */}
             {analysisHistory.length >= 2 && (
               <div className="mb-10">
@@ -5829,10 +5905,10 @@ ${errorMessage}`);
                 <Sparkles className="w-3.5 h-3.5" /> Powered by Google Gemini 2.0
               </div>
               <h1 className="text-4xl sm:text-7xl md:text-[9rem] font-black text-white mb-6 sm:mb-8 tracking-tighter leading-[0.85] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
-                Understand<br/>Any Codebase.
+                Onboard to Any<br/>Codebase Fast.
               </h1>
               <p className="text-slate-400 text-base sm:text-xl md:text-2xl max-w-3xl mx-auto mb-8 sm:mb-10 font-medium leading-relaxed px-2">
-                Paste a GitHub URL. Get architecture, ownership, hot zones, security audit, and an AI onboarding guide — in under 2 minutes.
+                Architecture blueprint, hot zones, ownership map, security audit, dead code detection, and an AI onboarding guide — in under 2 minutes.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
                 <button
@@ -5868,6 +5944,14 @@ ${errorMessage}`);
               <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
                 <Cloud className="w-4 h-4" /> Supabase
               </div>
+              <div className="w-px h-4 bg-slate-700" />
+              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                <BrainCircuit className="w-4 h-4" /> Claude MCP
+              </div>
+              <div className="w-px h-4 bg-slate-700" />
+              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                <Cpu className="w-4 h-4" /> Cursor
+              </div>
             </div>
 
             {/* Feature Grid */}
@@ -5879,9 +5963,9 @@ ${errorMessage}`);
                 { icon: Activity, title: 'Hot Zones', desc: 'See which files are actively being developed. Avoid stepping on ongoing work.', badge: 'Real-time' },
                 { icon: GitPullRequest, title: 'PR Review Copilot', desc: 'AI-powered pull request reviews. Risk assessment, suggestions, and file-by-file analysis.', badge: 'NEW' },
                 { icon: Shield, title: 'Security Audit', desc: 'Automatic vulnerability detection with remediation steps. Keep your code secure.', badge: 'Deep Scan' },
-                { icon: BrainCircuit, title: 'AI Copilot Chat', desc: 'Ask questions about the codebase in plain English. Get instant, contextual answers.', badge: 'Conversational' },
+                { icon: BrainCircuit, title: 'MCP Server', desc: 'Use GitMindPro as an MCP tool inside Claude Desktop, Cursor, Windsurf. analyze_repo, get_scorecard and more.', badge: 'Claude MCP' },
+                { icon: Zap, title: 'Performance Intelligence', desc: 'Bundle risk scorer, Core Web Vitals predictor, and render complexity profiler for your codebase.', badge: 'Wave 21' },
                 { icon: Share2, title: 'Share & Collaborate', desc: 'Share analysis results with your team via public links. Export to PDF or Markdown.', badge: 'Viral' },
-                { icon: Link, title: 'README Badge', desc: 'Add a GitMind score badge to your repo README. Show off your code quality.', badge: 'Free' },
               ].map((feature) => (
                 <div key={feature.title} className="group bg-slate-900/40 border border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 hover:border-indigo-500/40 transition-all hover:-translate-y-1 duration-300">
                   <div className="flex items-center gap-3 mb-4">
