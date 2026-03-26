@@ -3353,163 +3353,86 @@ ${errorMessage}`);
 
           </div>
         ) : (
-          <div className="max-w-7xl mx-auto py-32 px-8">
+          <div className="max-w-7xl mx-auto py-20 px-8">
             {/* Hero Section */}
-            <div className="text-center mb-32">
-              <h1 className="text-[10rem] font-black text-white mb-12 tracking-tighter leading-[0.8] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
+            <div className="text-center mb-24">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-full text-xs font-bold text-indigo-400 mb-8">
+                <Sparkles className="w-3.5 h-3.5" /> Powered by Google Gemini 2.0
+              </div>
+              <h1 className="text-7xl md:text-[9rem] font-black text-white mb-8 tracking-tighter leading-[0.85] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
                 Understand<br/>Any Codebase.
               </h1>
-              <p className="text-slate-400 text-2xl max-w-4xl mx-auto mb-16 font-medium leading-relaxed">
-                Stop spending hours understanding a new codebase. Get architecture, hot zones, learning path, and AI guidance in 5 minutes.
+              <p className="text-slate-400 text-xl md:text-2xl max-w-3xl mx-auto mb-10 font-medium leading-relaxed">
+                Paste a GitHub URL. Get architecture, ownership, hot zones, security audit, and an AI onboarding guide — in under 2 minutes.
               </p>
-              <button 
-                onClick={() => document.querySelector('input')?.focus()} 
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-6 px-16 rounded-3xl transition-all shadow-2xl shadow-indigo-500/50 text-xl mb-8"
-              >
-                Analyze a Repo
-              </button>
-              <p className="text-slate-500 text-sm">Free for 3 analyses • No signup required</p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+                <button
+                  onClick={() => document.querySelector('input')?.focus()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 px-14 rounded-3xl transition-all shadow-2xl shadow-indigo-500/40 text-lg"
+                >
+                  Analyze a Repo — Free
+                </button>
+                <button
+                  onClick={() => {
+                    setUrl('https://github.com/facebook/react');
+                    setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100);
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-white font-black py-5 px-14 rounded-3xl transition-all border border-slate-700 text-lg"
+                >
+                  Try Demo — React
+                </button>
+              </div>
+              <p className="text-slate-600 text-sm">Free for 3 analyses • No signup required • Results in ~60 seconds</p>
             </div>
 
-            {/* Screenshots/Features Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-32">
-              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
-                  <Rocket className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-4">Getting Started Guide</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  Instant onboarding with personalized learning path and critical files to read first.
-                </p>
-                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Example Output</div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                      <span className="text-slate-300 text-sm">Start with README.md</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                      <span className="text-slate-300 text-sm">Check package.json for dependencies</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                      <span className="text-slate-300 text-sm">Review main entry point</span>
-                    </div>
-                  </div>
-                </div>
+            {/* Works With Bar */}
+            <div className="flex items-center justify-center gap-10 mb-24 opacity-40">
+              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                <Code className="w-4 h-4" /> GitHub
               </div>
-
-              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
-                  <Layout className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-4">Architecture Overview</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  Interactive blueprint showing how components connect and data flows.
-                </p>
-                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Tech Stack Detected</div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">React</span>
-                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">TypeScript</span>
-                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">Node.js</span>
-                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded">PostgreSQL</span>
-                  </div>
-                </div>
+              <div className="w-px h-4 bg-slate-700" />
+              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                <Terminal className="w-4 h-4" /> VS Code
               </div>
-
-              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
-                  <Users className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-4">Team Intelligence</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  Know who owns what code and who&apos;s actively working on features.
-                </p>
-                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Code Ownership</div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-slate-300 text-sm">@johndoe</span>
-                      <span className="text-emerald-400 text-xs">Frontend Lead</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-300 text-sm">@sarahsmith</span>
-                      <span className="text-emerald-400 text-xs">Backend Dev</span>
-                    </div>
-                  </div>
-                </div>
+              <div className="w-px h-4 bg-slate-700" />
+              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                <Rocket className="w-4 h-4" /> Vercel
               </div>
-
-              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
-                  <Activity className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-4">Hot Zones & Activity</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  See what&apos;s changing most and avoid stepping on active development.
-                </p>
-                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Recent Activity</div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-slate-300 text-sm">auth/login.ts</span>
-                      <span className="text-amber-400 text-xs">🔥 Hot</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-300 text-sm">api/users.js</span>
-                      <span className="text-amber-400 text-xs">🔥 Hot</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
-                  <BrainCircuit className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-4">AI Copilot</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  Ask questions about the codebase and get instant, contextual answers.
-                </p>
-                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Example Questions</div>
-                  <div className="space-y-1">
-                    <div className="text-slate-300 text-sm">• &quot;Who built the auth system?&quot;</div>
-                    <div className="text-slate-300 text-sm">• &quot;How does data flow in this app?&quot;</div>
-                    <div className="text-slate-300 text-sm">• &quot;What&apos;s actively being developed?&quot;</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all">
-                <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6">
-                  <Shield className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-4">Security & Testing</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                  Identify vulnerabilities, missing tests, and technical debt automatically.
-                </p>
-                <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Security Insights</div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-3 h-3 text-amber-400" />
-                      <span className="text-slate-300 text-sm">API keys exposed in logs</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Bug className="w-3 h-3 text-rose-400" />
-                      <span className="text-slate-300 text-sm">Missing input validation</span>
-                    </div>
-                  </div>
-                </div>
+              <div className="w-px h-4 bg-slate-700" />
+              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                <Cloud className="w-4 h-4" /> Supabase
               </div>
             </div>
 
-            {/* Demo Video Placeholder */}
+            {/* Feature Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-24">
+              {[
+                { icon: Rocket, title: 'Onboarding Guide', desc: 'Personalized learning path with critical files ranked by importance. New devs ship in days, not weeks.', badge: 'AI-generated' },
+                { icon: Layout, title: 'Architecture Blueprint', desc: 'Interactive graph showing how components connect. Understand data flow at a glance.', badge: 'Visual' },
+                { icon: Users, title: 'Code Ownership Map', desc: 'Know exactly who owns what code and who to ask. No more guessing.', badge: 'Team Intel' },
+                { icon: Activity, title: 'Hot Zones', desc: 'See which files are actively being developed. Avoid stepping on ongoing work.', badge: 'Real-time' },
+                { icon: GitPullRequest, title: 'PR Review Copilot', desc: 'AI-powered pull request reviews. Risk assessment, suggestions, and file-by-file analysis.', badge: 'NEW' },
+                { icon: Shield, title: 'Security Audit', desc: 'Automatic vulnerability detection with remediation steps. Keep your code secure.', badge: 'Deep Scan' },
+                { icon: BrainCircuit, title: 'AI Copilot Chat', desc: 'Ask questions about the codebase in plain English. Get instant, contextual answers.', badge: 'Conversational' },
+                { icon: Share2, title: 'Share & Collaborate', desc: 'Share analysis results with your team via public links. Export to PDF or Markdown.', badge: 'Viral' },
+                { icon: Link, title: 'README Badge', desc: 'Add a GitMind score badge to your repo README. Show off your code quality.', badge: 'Free' },
+              ].map((feature) => (
+                <div key={feature.title} className="group bg-slate-900/40 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/40 transition-all hover:-translate-y-1 duration-300">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-indigo-500/15 rounded-xl flex items-center justify-center group-hover:bg-indigo-500/25 transition-colors">
+                      <feature.icon className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 bg-indigo-500/10 text-indigo-400 rounded-full">{feature.badge}</span>
+                  </div>
+                  <h3 className="text-lg font-black text-white mb-2">{feature.title}</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">{feature.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Analysis History (for logged-in users) */}
             {authUser && (analysisHistory.length > 0 || historyLoading) && (
-              <div className="mb-32">
+              <div className="mb-24">
                 <AnalysisHistory
                   analyses={analysisHistory}
                   loading={historyLoading}
@@ -3520,47 +3443,97 @@ ${errorMessage}`);
                 />
               </div>
             )}
-            <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-12 mb-32 text-center">
-              <Video className="w-16 h-16 text-indigo-400 mx-auto mb-6" />
-              <h3 className="text-2xl font-black text-white mb-4">See It In Action</h3>
-              <p className="text-slate-400 text-lg mb-8 max-w-2xl mx-auto">
-                Watch a 45-second demo showing how GitMind Pro analyzes a real codebase from GitHub URL to full insights.
-              </p>
-              <button className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 px-8 rounded-2xl transition-all">
-                Watch Demo Video
-              </button>
+
+            {/* Pricing Preview */}
+            <div className="mb-24">
+              <div className="text-center mb-12">
+                <h2 className="text-4xl font-black text-white mb-4">Simple, Developer-Friendly Pricing</h2>
+                <p className="text-slate-400 text-lg">Start free. Upgrade when you need unlimited power.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8">
+                  <h3 className="text-lg font-black text-white mb-1">Free</h3>
+                  <div className="text-3xl font-black text-white mb-4">$0</div>
+                  <ul className="space-y-2 text-sm text-slate-400 mb-6">
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> 3 analyses per day</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> AI code intelligence</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Architecture blueprint</li>
+                  </ul>
+                  <button onClick={() => document.querySelector('input')?.focus()} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all">
+                    Get Started
+                  </button>
+                </div>
+                <div className="bg-indigo-950/30 border border-indigo-500 rounded-3xl p-8 relative">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-indigo-600 rounded-full text-[9px] font-black uppercase tracking-widest text-white">7-day free trial</div>
+                  <h3 className="text-lg font-black text-white mb-1">Pro</h3>
+                  <div className="text-3xl font-black text-white mb-4">$9<span className="text-sm text-slate-500 font-medium">/mo</span></div>
+                  <ul className="space-y-2 text-sm text-slate-300 mb-6">
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Unlimited analyses</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> PR review copilot</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Export PDF & Markdown</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Analysis history</li>
+                  </ul>
+                  <button onClick={() => setShowPricing(true)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all">
+                    Start Free Trial
+                  </button>
+                </div>
+                <div className="bg-violet-950/20 border border-violet-500/40 rounded-3xl p-8">
+                  <h3 className="text-lg font-black text-white mb-1">Team</h3>
+                  <div className="text-3xl font-black text-white mb-4">$49<span className="text-sm text-slate-500 font-medium">/mo</span></div>
+                  <ul className="space-y-2 text-sm text-slate-300 mb-6">
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Everything in Pro</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> 25 team members</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Shared workspaces</li>
+                    <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Team analytics</li>
+                  </ul>
+                  <button onClick={() => setShowPricing(true)} className="w-full py-3 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all">
+                    Upgrade to Team
+                  </button>
+                </div>
+              </div>
+              <p className="text-center text-slate-600 text-xs mt-4">Annual billing available — save 27%</p>
             </div>
 
             {/* Trust Signals */}
-            <div className="text-center mb-32">
-              <h3 className="text-xl font-black text-white mb-8">Trusted by Developers</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                  <div className="text-4xl mb-4">🚀</div>
-                  <p className="text-slate-400 text-sm italic">&quot;Saved me 2 days onboarding to a new team. The AI explanations are spot-on.&quot;</p>
-                  <div className="text-slate-500 text-xs mt-4">- Senior Developer</div>
+            <div className="mb-24">
+              <div className="text-center mb-12">
+                <h3 className="text-2xl font-black text-white mb-2">Built for Real Engineering Teams</h3>
+                <p className="text-slate-500">See what developers are saying</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center gap-1 mb-3">
+                    {[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-sm">★</span>)}
+                  </div>
+                  <p className="text-slate-300 text-sm italic mb-4">&quot;Saved me 2 days onboarding to a new team. The AI explanations are spot-on. Every dev should use this.&quot;</p>
+                  <div className="text-slate-500 text-xs font-bold">— Senior Developer, fintech startup</div>
                 </div>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                  <div className="text-4xl mb-4">💡</div>
-                  <p className="text-slate-400 text-sm italic">&quot;Finally understand who owns what code. No more guessing who to ask.&quot;</p>
-                  <div className="text-slate-500 text-xs mt-4">- Tech Lead</div>
+                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center gap-1 mb-3">
+                    {[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-sm">★</span>)}
+                  </div>
+                  <p className="text-slate-300 text-sm italic mb-4">&quot;The PR review copilot caught a security hole our team missed. Paying for itself immediately.&quot;</p>
+                  <div className="text-slate-500 text-xs font-bold">— Tech Lead, SaaS company</div>
                 </div>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                  <div className="text-4xl mb-4">⚡</div>
-                  <p className="text-slate-400 text-sm italic">&quot;Hot zones feature prevented me from breaking active development. Game-changer.&quot;</p>
-                  <div className="text-slate-500 text-xs mt-4">- Consultant</div>
+                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center gap-1 mb-3">
+                    {[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-sm">★</span>)}
+                  </div>
+                  <p className="text-slate-300 text-sm italic mb-4">&quot;Hot zones + ownership map = no more stepping on teammates&apos; work. This is essential for remote teams.&quot;</p>
+                  <div className="text-slate-500 text-xs font-bold">— Engineering Manager, remote-first</div>
                 </div>
               </div>
             </div>
 
-            {/* CTA */}
-            <div className="text-center">
-              <h2 className="text-4xl font-black text-white mb-8">Ready to Understand Any Codebase?</h2>
-              <button 
-                onClick={() => document.querySelector('input')?.focus()} 
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-6 px-12 rounded-3xl transition-all shadow-2xl shadow-indigo-500/50 text-xl"
+            {/* Final CTA */}
+            <div className="text-center py-16 bg-gradient-to-b from-indigo-950/20 to-transparent rounded-3xl border border-indigo-500/10">
+              <h2 className="text-4xl md:text-5xl font-black text-white mb-6">Stop Wasting Time<br/>Reading Code Blindly</h2>
+              <p className="text-slate-400 text-lg mb-8 max-w-2xl mx-auto">Join developers who onboard to new codebases 10x faster with AI-powered analysis.</p>
+              <button
+                onClick={() => document.querySelector('input')?.focus()}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 px-14 rounded-3xl transition-all shadow-2xl shadow-indigo-500/40 text-lg"
               >
-                Try GitMind Pro Free
+                Analyze Your First Repo — Free
               </button>
             </div>
           </div>
