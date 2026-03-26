@@ -19,6 +19,8 @@ import ExpertMarketplace from './components/ExpertMarketplace';
 import CompareRepos from './components/CompareRepos';
 import NotificationCenter from './components/NotificationCenter';
 import type { AppNotification } from './components/NotificationCenter';
+import OnboardingWizard from './components/OnboardingWizard';
+import TrendChart from './components/TrendChart';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin } from 'lucide-react';
 
 type AiStudioBridge = {
@@ -295,6 +297,9 @@ const App: React.FC = () => {
 
   // Dashboard tab state
   const [dashboardTab, setDashboardTab] = useState<'home' | 'marketplace' | 'compare'>('home');
+
+  // Onboarding wizard state
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('gitmind.onboarded'));
   const [showExpertHire, setShowExpertHire] = useState(false);
 
   // Notifications state (localStorage-backed)
@@ -3742,6 +3747,23 @@ ${errorMessage}`);
               </div>
             </div>
 
+            {/* Score Trends */}
+            {analysisHistory.length >= 2 && (
+              <div className="mb-10">
+                <h2 className="text-lg font-black text-white flex items-center gap-2 mb-4"><TrendingUp className="w-4 h-4 text-indigo-400" /> Score Trends</h2>
+                <TrendChart
+                  history={analysisHistory.filter(a => a.scorecard).map(a => ({
+                    date: a.createdAt,
+                    maintenance: (a.scorecard!.maintenance / 10) * 100,
+                    documentation: (a.scorecard!.documentation / 10) * 100,
+                    innovation: (a.scorecard!.innovation / 10) * 100,
+                    security: (a.scorecard!.security / 10) * 100,
+                  }))}
+                  repoName={analysisHistory[0]?.repoName}
+                />
+              </div>
+            )}
+
             {/* Recent Analyses */}
             {(analysisHistory.length > 0 || historyLoading) && (
               <div className="mb-10">
@@ -4070,6 +4092,25 @@ ${errorMessage}`);
             </p>
           </div>
         </div>
+      )}
+
+      {/* Onboarding Wizard */}
+      {showOnboarding && (
+        <OnboardingWizard
+          isAuthEnabled={authEnabled}
+          isSignedIn={!!authUser}
+          onSignIn={() => { void signInWithGitHub(); }}
+          onComplete={(repoUrl) => {
+            setShowOnboarding(false);
+            if (repoUrl) {
+              setUrl(repoUrl);
+              setTimeout(() => {
+                const form = document.querySelector('form');
+                if (form) form.requestSubmit();
+              }, 100);
+            }
+          }}
+        />
       )}
 
       {/* Pricing Modal */}
