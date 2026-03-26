@@ -16,7 +16,10 @@ import ScoreCard from './components/ScoreCard';
 import AnalysisHistory from './components/AnalysisHistory';
 import PricingModal from './components/PricingModal';
 import ExpertMarketplace from './components/ExpertMarketplace';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase } from 'lucide-react';
+import CompareRepos from './components/CompareRepos';
+import NotificationCenter from './components/NotificationCenter';
+import type { AppNotification } from './components/NotificationCenter';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -291,8 +294,41 @@ const App: React.FC = () => {
   });
 
   // Dashboard tab state
-  const [dashboardTab, setDashboardTab] = useState<'home' | 'marketplace'>('home');
+  const [dashboardTab, setDashboardTab] = useState<'home' | 'marketplace' | 'compare'>('home');
   const [showExpertHire, setShowExpertHire] = useState(false);
+
+  // Notifications state (localStorage-backed)
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try { return JSON.parse(localStorage.getItem('gitmind.notifications') || '[]'); } catch { return []; }
+  });
+  const addNotification = useCallback((n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>) => {
+    setNotifications(prev => {
+      const next = [{ ...n, id: crypto.randomUUID(), read: false, createdAt: new Date().toISOString() }, ...prev].slice(0, 50);
+      localStorage.setItem('gitmind.notifications', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications(prev => {
+      const next = prev.map(n => n.id === id ? { ...n, read: true } : n);
+      localStorage.setItem('gitmind.notifications', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications(prev => {
+      const next = prev.map(n => ({ ...n, read: true }));
+      localStorage.setItem('gitmind.notifications', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications(prev => {
+      const next = prev.filter(n => n.id !== id);
+      localStorage.setItem('gitmind.notifications', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const exportAnalysisMarkdown = useCallback(() => {
     if (!repo || !analysis) return;
@@ -483,6 +519,7 @@ const App: React.FC = () => {
       setLoadingProgress(100);
       setLoadingStage('Complete!');
       addLog('✅ Analysis loaded from history (no re-analysis needed)', 'success');
+      addNotification({ type: 'analysis_complete', title: 'Analysis Loaded', message: `${parsed.owner}/${parsed.repo} — loaded from history` });
 
       setTimeout(() => {
         setLoading(false);
@@ -655,10 +692,12 @@ const App: React.FC = () => {
           const isTrial = sub.status === 'trialing';
           addLog(isTrial ? `🎉 ${planName} trial started! 7 days free.` : `🎉 Subscription activated! Welcome to ${planName}.`, 'success');
           setCheckoutBanner({ type: 'success', plan: planName, trial: isTrial });
+          addNotification({ type: 'system', title: isTrial ? `${planName} Trial Started` : `${planName} Activated`, message: isTrial ? '7 days free — enjoy unlimited analyses!' : 'Your subscription is active. Enjoy unlimited analyses!' });
         });
       } else {
         addLog('🎉 Subscription activated!', 'success');
         setCheckoutBanner({ type: 'success' });
+        addNotification({ type: 'system', title: 'Subscription Activated', message: 'Your subscription is active. Enjoy unlimited analyses!' });
       }
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
@@ -1111,6 +1150,7 @@ const App: React.FC = () => {
       
       addLog('✅ AI analysis completed', 'success');
       setAnalysis(res);
+      addNotification({ type: 'analysis_complete', title: 'Analysis Complete', message: `${parsed.owner}/${parsed.repo} — AI analysis finished successfully` });
       
       // Increment free tier counter for non-authenticated users
       if (!authUser) {
@@ -1950,6 +1990,13 @@ ${errorMessage}`);
                   >
                     <LogOut className="w-4 h-4" /> Sign out
                   </button>
+                  <NotificationCenter
+                    authUser={authUser}
+                    notifications={notifications}
+                    onMarkRead={markNotificationRead}
+                    onMarkAllRead={markAllNotificationsRead}
+                    onDismiss={dismissNotification}
+                  />
                 </>
               ) : (
                 <button
@@ -2235,6 +2282,30 @@ ${errorMessage}`);
                       >
                         <Briefcase className="w-3.5 h-3.5" /> Hire Expert
                       </button>
+                      {repo && analysis && (
+                        <>
+                          <button
+                            onClick={() => {
+                              const text = `Just analyzed ${repo.owner}/${repo.repo} with @GitMindPro — AI-powered code intelligence! 🚀`;
+                              window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent('https://gitmindpro.vercel.app')}`, '_blank', 'noopener');
+                            }}
+                            className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                            title="Share on X / Twitter"
+                          >
+                            <Twitter className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const text = `Just used GitMindPro to get an AI-powered code intelligence report on ${repo.owner}/${repo.repo}. Check it out!`;
+                              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://gitmindpro.vercel.app')}&summary=${encodeURIComponent(text)}`, '_blank', 'noopener');
+                            }}
+                            className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                            title="Share on LinkedIn"
+                          >
+                            <Linkedin className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                </div>
@@ -3495,10 +3566,15 @@ ${errorMessage}`);
               <button onClick={() => setDashboardTab('marketplace')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${dashboardTab === 'marketplace' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
                 <Briefcase className="w-3.5 h-3.5" /> Expert Marketplace
               </button>
+              <button onClick={() => setDashboardTab('compare')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${dashboardTab === 'compare' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
+                <GitBranch className="w-3.5 h-3.5" /> Compare
+              </button>
             </div>
 
             {dashboardTab === 'marketplace' ? (
               <ExpertMarketplace authUser={authUser} />
+            ) : dashboardTab === 'compare' ? (
+              <CompareRepos />
             ) : (
             <>
 
@@ -3886,6 +3962,8 @@ ${errorMessage}`);
           { id: 'new', label: 'New Analysis', desc: 'Paste a GitHub URL', icon: Plus, action: () => { setCmdPaletteOpen(false); document.querySelector('input')?.focus(); } },
           { id: 'demo', label: 'Try Demo — React', desc: 'Analyze facebook/react', icon: Rocket, action: () => { setCmdPaletteOpen(false); setUrl('https://github.com/facebook/react'); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100); } },
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
+          { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
+          { id: 'marketplace', label: 'Expert Marketplace', desc: 'Hire developers or list your skills', icon: Briefcase, action: () => { setCmdPaletteOpen(false); setDashboardTab('marketplace'); } },
           ...(authUser ? [
             { id: 'signout', label: 'Sign Out', desc: authUser.user_metadata?.user_name || 'GitHub account', icon: LogOut, action: () => { setCmdPaletteOpen(false); void signOutAuth(); } },
           ] : [
