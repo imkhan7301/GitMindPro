@@ -18,6 +18,20 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'vendor-react': ['react', 'react-dom'],
+              'vendor-reactflow': ['reactflow'],
+              'vendor-supabase': ['@supabase/supabase-js'],
+              'vendor-gemini': ['@google/genai'],
+              'vendor-mermaid': ['mermaid'],
+              'vendor-jspdf': ['jspdf'],
+            }
+          }
+        }
       }
     };
 });

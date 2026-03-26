@@ -42,8 +42,16 @@
 
 ### Next Pipeline (Priority Order)
 
-1. Saved analysis history per workspace ← IN PROGRESS
-2. PR review intelligence
+1. ~~Saved analysis history per workspace~~ — SHIPPED (`ca88a13`)
+2. ~~PR review intelligence~~ — SHIPPED (`0cfcf20`)
 3. Bundle size optimization (dynamic imports)
 4. Stripe integration for Pro tier ($19/mo)
 5. Team tier workspace enhancements ($99/mo)
+
+### March 26 — PR Review Intelligence (`0cfcf20`)
+
+- Schema: `pr_reviews` table with RLS in supabase/schema.sql
+- Service: `savePRReview()` and `getPRReviewHistory()` in supabaseService
+- UI: Past reviews list in PR Review tab with risk badges
+- UI: Changed files panel with +/- diff stats and status badges
+- Auto-refresh history after each review save
