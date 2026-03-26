@@ -9,6 +9,8 @@ import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWork
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
 import type { SubscriptionStatus } from './services/stripeService';
+import { setSentryUser, clearSentryUser } from './services/sentryService';
+import { sendSlackNotification } from './services/slackService';
 import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, SavedAnalysis, SavedPRReview, Workspace } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
@@ -226,19 +228,26 @@ const App: React.FC = () => {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const margin = 40;
-    let y = 50;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const certId = `GMP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const generatedDate = new Date().toLocaleString();
+    const verifyUrl = `https://gitmindpro.vercel.app/verify/${certId}`;
+    let y = 40;
 
-    doc.setFontSize(20);
-    doc.text('GitMindPro Repository Analysis', margin, y);
-    y += 30;
-
-    doc.setFontSize(12);
-    doc.text(`Repository: ${repo.owner}/${repo.repo}`, margin, y);
-    y += 18;
-    doc.text(`URL: ${repo.url}`, margin, y);
-    y += 18;
-    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
-    y += 24;
+    // ─── Certification Header Bar ───
+    doc.setFillColor(67, 56, 202); // indigo-700
+    doc.rect(0, 0, pageWidth, 80, 'F');
+    doc.setFontSize(22);
+    doc.setTextColor(255, 255, 255);
+    doc.text('GitMindPro', margin, 35);
+    doc.setFontSize(10);
+    doc.text('CERTIFIED CODE INTELLIGENCE REPORT', margin, 55);
+    doc.setFontSize(8);
+    doc.setTextColor(200, 200, 255);
+    doc.text(`Verification ID: ${certId}`, pageWidth - margin, 35, { align: 'right' });
+    doc.text(generatedDate, pageWidth - margin, 50, { align: 'right' });
+    doc.text(verifyUrl, pageWidth - margin, 65, { align: 'right' });
+    y = 100;
 
     const addSection = (title: string, content: string) => {
       doc.setFontSize(14);
@@ -640,6 +649,7 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChange((user) => {
       setAuthUser(user);
       if (user) {
+        setSentryUser(user.id, user.email ?? undefined);
         void (async () => {
           await ensureUserProfile(user).catch((err) => {
             addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
@@ -650,6 +660,7 @@ const App: React.FC = () => {
           setSubscription(sub);
         })();
       } else {
+        clearSentryUser();
         setWorkspaces([]);
         setActiveWorkspaceId('');
         window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
@@ -712,6 +723,19 @@ const App: React.FC = () => {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [authUser, addLog]);
+
+  // Handle GitHub App installation callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github_app_installed') === '1') {
+      const action = params.get('setup_action') || 'install';
+      if (action === 'install') {
+        addLog('GitHub App installed successfully!', 'success');
+        addNotification({ type: 'system', title: 'GitHub App Installed', message: 'GitMind Pro now has enhanced access to your repositories.' });
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [addLog]);
 
   // Auto-dismiss checkout banner
   useEffect(() => {
@@ -1187,6 +1211,14 @@ const App: React.FC = () => {
             setIsShared(false);
             addLog('Analysis saved to your profile', 'success');
             void loadAnalysisHistory(authUser.id, activeWorkspaceId || undefined);
+            // Send Slack notification if configured
+            const sc = res.scorecard;
+            const avgScore = sc ? Math.round((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4) : 0;
+            void sendSlackNotification({
+              repoName: `${details.owner}/${details.repo}`,
+              score: avgScore,
+              summary: res.summary?.slice(0, 300),
+            }).catch(() => { /* Slack not configured — silent */ });
           })
           .catch((err) => addLog(`Failed to save analysis: ${getErrorText(err)}`, 'error'));
       }

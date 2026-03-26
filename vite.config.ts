@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
               'vendor-gemini': ['@google/genai'],
               'vendor-mermaid': ['mermaid'],
               'vendor-jspdf': ['jspdf'],
+              'vendor-sentry': ['@sentry/react'],
             }
           }
         }
