@@ -9,11 +9,14 @@ interface PricingModalProps {
   subscription: SubscriptionStatus;
 }
 
+type BillingInterval = 'monthly' | 'annual';
+
 const PLANS = [
   {
     name: 'Free',
-    price: '$0',
-    period: '/forever',
+    monthly: { price: '$0', priceId: null },
+    annual: { price: '$0', priceId: null },
+    period: { monthly: '/forever', annual: '/forever' },
     icon: 'shield' as const,
     features: [
       '3 analyses per day',
@@ -24,14 +27,21 @@ const PLANS = [
     ],
     missing: ['Unlimited analyses', 'Team workspaces', 'Priority support', 'Export to PDF'],
     cta: 'Current Plan',
-    priceId: null,
     highlight: false,
     trial: false,
+    savings: null,
   },
   {
     name: 'Pro',
-    price: '$9',
-    period: '/month',
+    monthly: {
+      price: '$9',
+      priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro_placeholder',
+    },
+    annual: {
+      price: '$79',
+      priceId: import.meta.env.VITE_STRIPE_PRO_ANNUAL_PRICE_ID || 'price_pro_annual_placeholder',
+    },
+    period: { monthly: '/month', annual: '/year' },
     icon: 'zap' as const,
     features: [
       'Unlimited analyses',
@@ -45,14 +55,21 @@ const PLANS = [
     ],
     missing: ['Team workspaces', 'Shared analysis history', 'Team analytics'],
     cta: 'Start 7-Day Free Trial',
-    priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro_placeholder',
     highlight: true,
     trial: true,
+    savings: 'Save $29/yr',
   },
   {
     name: 'Team',
-    price: '$49',
-    period: '/month',
+    monthly: {
+      price: '$49',
+      priceId: import.meta.env.VITE_STRIPE_TEAM_PRICE_ID || 'price_team_placeholder',
+    },
+    annual: {
+      price: '$399',
+      priceId: import.meta.env.VITE_STRIPE_TEAM_ANNUAL_PRICE_ID || 'price_team_annual_placeholder',
+    },
+    period: { monthly: '/month', annual: '/year' },
     icon: 'users' as const,
     features: [
       'Everything in Pro',
@@ -67,9 +84,9 @@ const PLANS = [
     ],
     missing: [],
     cta: 'Upgrade to Team',
-    priceId: import.meta.env.VITE_STRIPE_TEAM_PRICE_ID || 'price_team_placeholder',
     highlight: false,
     trial: false,
+    savings: 'Save $189/yr',
   },
 ];
 
@@ -81,6 +98,7 @@ const ICON_MAP = {
 
 const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManage, subscription }) => {
   const [upgrading, setUpgrading] = useState(false);
+  const [interval, setInterval] = useState<BillingInterval>('monthly');
 
   const handleUpgrade = async (priceId: string, trial?: boolean) => {
     setUpgrading(true);
@@ -94,7 +112,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-4xl w-full shadow-2xl animate-in fade-in scale-95 duration-300">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-2xl font-black text-white">Choose Your Plan</h2>
             <p className="text-slate-400 text-sm mt-1">Unlock the full power of GitMind Pro</p>
@@ -102,6 +120,23 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Billing Toggle */}
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <span className={`text-sm font-bold transition-colors ${interval === 'monthly' ? 'text-white' : 'text-slate-500'}`}>Monthly</span>
+          <button
+            onClick={() => setInterval(prev => prev === 'monthly' ? 'annual' : 'monthly')}
+            className={`relative w-14 h-7 rounded-full transition-colors ${interval === 'annual' ? 'bg-emerald-600' : 'bg-slate-700'}`}
+          >
+            <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform ${interval === 'annual' ? 'translate-x-7' : 'translate-x-0.5'}`} />
+          </button>
+          <span className={`text-sm font-bold transition-colors ${interval === 'annual' ? 'text-white' : 'text-slate-500'}`}>Annual</span>
+          {interval === 'annual' && (
+            <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-black uppercase tracking-widest rounded-full">
+              Save 27%
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -112,6 +147,8 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
               (plan.name === 'Team' && subscription.plan === 'team' && subscription.isActive);
 
             const IconComponent = ICON_MAP[plan.icon];
+            const currentPricing = plan[interval];
+            const currentPeriod = plan.period[interval];
 
             return (
               <div
@@ -136,9 +173,17 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                     <h3 className="text-lg font-black text-white">{plan.name}</h3>
                   </div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-white">{plan.price}</span>
-                    <span className="text-slate-500 text-sm">{plan.period}</span>
+                    <span className="text-3xl font-black text-white">{currentPricing.price}</span>
+                    <span className="text-slate-500 text-sm">{currentPeriod}</span>
                   </div>
+                  {interval === 'annual' && plan.name !== 'Free' && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-emerald-400 text-xs font-bold">{plan.savings}</span>
+                      <span className="text-slate-600 text-xs">
+                        ({plan.name === 'Pro' ? '$6.58' : '$33.25'}/mo effective)
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <ul className="space-y-3 mb-6">
@@ -169,9 +214,9 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                       Current Plan
                     </div>
                   )
-                ) : plan.priceId ? (
+                ) : currentPricing.priceId ? (
                   <button
-                    onClick={() => void handleUpgrade(plan.priceId!, plan.trial)}
+                    onClick={() => void handleUpgrade(currentPricing.priceId!, plan.trial)}
                     disabled={upgrading}
                     className={`w-full px-4 py-3 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
                       plan.name === 'Team' ? 'bg-violet-600 hover:bg-violet-500' : 'bg-indigo-600 hover:bg-indigo-500'
