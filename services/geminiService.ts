@@ -1798,3 +1798,68 @@ Also generate a GitHub PR template in markdown that includes these checklist ite
     generatedAt: new Date().toISOString(),
   };
 };
+
+// ────── Wave 16: AI Architecture Diagram ──────
+
+export interface ArchitectureDiagramData {
+  mermaidSyntax: string;
+  description: string;
+  componentCount: number;
+}
+
+export const generateArchitectureDiagram = async (params: {
+  repoName: string;
+  techStack: string[];
+  summary: string;
+  architectureSummary: string;
+  topFiles: string[];
+}): Promise<ArchitectureDiagramData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const prompt = `You are a senior software architect. Generate a Mermaid flowchart diagram for the repository "${params.repoName}".
+
+Tech Stack: ${params.techStack.slice(0, 10).join(', ')}
+Summary: ${params.summary.slice(0, 400)}
+Architecture Notes: ${params.architectureSummary.slice(0, 400)}
+Key Files/Modules: ${params.topFiles.slice(0, 15).join(', ')}
+
+Create a clear, meaningful Mermaid flowchart (graph TD) that shows:
+1. The main components/modules of this system
+2. How they connect and communicate (arrows with brief labels)
+3. External services or APIs if any
+4. Group related components in subgraphs where it makes sense
+
+Rules:
+- Use graph TD (top-down) layout
+- Keep node labels short (2-4 words max)
+- Use meaningful groupings with subgraph when there are clear layers (e.g., Frontend, Backend, Database, APIs)
+- Add concise edge labels for data flow
+- Maximum 20 nodes total — focus on the most important components
+- Use only valid Mermaid 10 syntax — no special characters in node IDs
+- Node IDs must use only alphanumeric characters and underscores
+
+Also provide a short 1-sentence description of what the diagram shows, and the count of main components.`;
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: prompt }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          mermaidSyntax: { type: Type.STRING },
+          description: { type: Type.STRING },
+          componentCount: { type: Type.NUMBER },
+        },
+        required: ['mermaidSyntax', 'description', 'componentCount'],
+      }
+    }
+  }, 'architecture diagram generator');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    mermaidSyntax: parsed.mermaidSyntax || 'graph TD\n  A[Repository] --> B[No Data]',
+    description: parsed.description || '',
+    componentCount: parsed.componentCount || 0,
+  };
+};

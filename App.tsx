@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -52,6 +52,10 @@ import CodeReviewChecklist from './components/CodeReviewChecklist';
 import type { ReviewChecklist } from './components/CodeReviewChecklist';
 import SmartAlerts from './components/SmartAlerts';
 import type { ScoreAlert } from './components/SmartAlerts';
+import VibeModeSelector from './components/VibeModeSelector';
+import type { VibeMode } from './components/VibeModeSelector';
+import ArchitectureDiagram from './components/ArchitectureDiagram';
+import type { ArchitectureDiagramResult } from './components/ArchitectureDiagram';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
@@ -425,6 +429,20 @@ const App: React.FC = () => {
     setScoreAlerts(alerts);
     localStorage.setItem('gitmind.scoreAlerts', JSON.stringify(alerts));
   }, []);
+
+  // Wave 16: Vibe Mode (localStorage-persisted)
+  const [vibeMode, setVibeMode] = useState<VibeMode>(() => {
+    const saved = localStorage.getItem('gitmind.vibeMode') as VibeMode | null;
+    return saved || 'new-dev';
+  });
+  const handleVibeChange = useCallback((v: VibeMode) => {
+    setVibeMode(v);
+    localStorage.setItem('gitmind.vibeMode', v);
+  }, []);
+
+  // Wave 16: AI Architecture Diagram state
+  const [archDiagram, setArchDiagram] = useState<ArchitectureDiagramResult | null>(null);
+  const [archDiagramLoading, setArchDiagramLoading] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -977,6 +995,60 @@ const App: React.FC = () => {
       setChecklistLoading(false);
     }
   }, [repo, analysis, deepAudit, addLog]);
+
+  // Wave 16: AI Architecture Diagram handler
+  const handleGenerateArchDiagram = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setArchDiagramLoading(true);
+    try {
+      const result = await generateArchitectureDiagram({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+        architectureSummary: analysis.architectureTour?.summary || '',
+        topFiles: (onboardingGuide?.criticalFiles || []).concat(
+          (onboardingGuide?.recentActivity?.hotFiles || []).map(([f]) => f)
+        ).slice(0, 15),
+      });
+      setArchDiagram(result as ArchitectureDiagramResult);
+      addLog('AI architecture diagram generated', 'success');
+    } catch (err) {
+      addLog(`Architecture diagram failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    } finally {
+      setArchDiagramLoading(false);
+    }
+  }, [repo, analysis, addLog]);
+
+  // Wave 16: Export as Agent-ready JSON
+  const exportAnalysisJSON = useCallback(() => {
+    if (!repo || !analysis) return;
+    const payload = {
+      meta: {
+        generatedBy: 'GitMindPro',
+        generatedAt: new Date().toISOString(),
+        repository: `${repo.owner}/${repo.repo}`,
+        url: `https://github.com/${repo.owner}/${repo.repo}`,
+      },
+      summary: analysis.summary,
+      techStack: analysis.techStack,
+      scorecard: analysis.scorecard,
+      roadmap: analysis.roadmap,
+      architectureTour: analysis.architectureTour,
+      startupPitch: analysis.startupPitch,
+      aiStrategy: analysis.aiStrategy,
+      criticalFiles: onboardingGuide?.criticalFiles || [],
+      hotFiles: onboardingGuide?.recentActivity?.hotFiles?.map(([f]) => f) || [],
+      badge: `https://gitmindpro.vercel.app/api/badge?owner=${repo.owner}&repo=${repo.repo}`,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${repo.owner}_${repo.repo}_gitmind_agent.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog('Agent-ready JSON exported', 'success');
+  }, [repo, analysis, addLog]);
 
   const handleGetFix = useCallback(async (findingKey: string, params: {
     file: string; title: string; rationale: string; recommendation: string;
@@ -1746,6 +1818,8 @@ const App: React.FC = () => {
     setCveReport(null);
     // Wave 15: reset checklist state
     setReviewChecklist(null);
+    // Wave 16: reset architecture diagram state
+    setArchDiagram(null);
     addLog(`Fetching repository...`, 'info');
     
     try {
@@ -2989,6 +3063,12 @@ ${errorMessage}`);
             </div>
 
             <div className="col-span-12 xl:col-span-6 space-y-6 sm:space-y-10">
+
+              {/* Wave 16: Vibe Mode Selector */}
+              {analysis && (
+                <VibeModeSelector value={vibeMode} onChange={handleVibeChange} />
+              )}
+
                <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl">
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -3056,6 +3136,13 @@ ${errorMessage}`);
                         className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
                       >
                         <FileText className="w-3.5 h-3.5" /> Markdown
+                      </button>
+                      <button
+                        onClick={exportAnalysisJSON}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                        title="Export agent-ready JSON for Cursor / Claude Code / Devin"
+                      >
+                        <Cpu className="w-3.5 h-3.5" /> JSON
                       </button>
                       <button onClick={exportAnalysisPdf} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black rounded-xl transition-all text-xs">
                         Export to PDF
@@ -3959,6 +4046,7 @@ ${errorMessage}`);
                )}
 
                {activeTab === 'blueprint' && (
+                 <>
                  <div className="grid grid-cols-12 gap-8">
                    <div className="col-span-12 xl:col-span-8 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-0 shadow-2xl h-[700px] relative overflow-hidden flex flex-col">
                       <div className="p-10 pb-6 flex flex-wrap items-center justify-between gap-4">
@@ -4079,6 +4167,17 @@ ${errorMessage}`);
                       </div>
                    </div>
                  </div>
+
+                 {/* Wave 16: AI Architecture Diagram */}
+                 {repo && (
+                   <ArchitectureDiagram
+                     diagram={archDiagram}
+                     loading={archDiagramLoading}
+                     onGenerate={handleGenerateArchDiagram}
+                     repoName={`${repo.owner}/${repo.repo}`}
+                   />
+                 )}
+                 </>
                )}
 
                {activeTab === 'audit' && (
