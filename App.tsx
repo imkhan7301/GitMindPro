@@ -5,9 +5,9 @@ import { jsPDF } from 'jspdf';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, signInWithGitHub, signOutAuth } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecord, savePRReview, signInWithGitHub, signOutAuth } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
-import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, SavedAnalysis, Workspace } from './types';
+import { GithubRepo, FileNode, AnalysisResult, ChatMessage, AppTab, TerminalLog, DeepAudit, ProjectInsights, CodeHealth, OnboardingGuide, InsightSummary, VulnerabilityRemediationPlan, PRReviewResult, SavedAnalysis, SavedPRReview, Workspace } from './types';
 import FileTree from './components/FileTree';
 import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
@@ -165,6 +165,7 @@ const App: React.FC = () => {
   const [prReviewLoading, setPrReviewLoading] = useState(false);
   const [prReviewResult, setPrReviewResult] = useState<PRReviewResult | null>(null);
   const [prReviewMeta, setPrReviewMeta] = useState<{ number: number; title: string; fileCount: number } | null>(null);
+  const [prReviewFiles, setPrReviewFiles] = useState<{ filename: string; status: string; additions: number; deletions: number }[]>([]);
   
   // Free tier state
   const [freeTierStatus, setFreeTierStatus] = useState(getFreeTierStatus());
@@ -173,6 +174,10 @@ const App: React.FC = () => {
   // Analysis history state
   const [analysisHistory, setAnalysisHistory] = useState<SavedAnalysis[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // PR review history state
+  const [prReviewHistory, setPrReviewHistory] = useState<SavedPRReview[]>([]);
+  const [prHistoryLoading, setPrHistoryLoading] = useState(false);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -330,11 +335,24 @@ const App: React.FC = () => {
     }
   }, [addLog]);
 
+  const loadPRReviewHistory = useCallback(async (userId: string, orgId?: string) => {
+    setPrHistoryLoading(true);
+    try {
+      const history = await getPRReviewHistory({ userId, organizationId: orgId || null });
+      setPrReviewHistory(history);
+    } catch (err) {
+      addLog(`PR review history load failed: ${getErrorText(err)}`, 'error');
+    } finally {
+      setPrHistoryLoading(false);
+    }
+  }, [addLog]);
+
   useEffect(() => {
     if (authUser && activeWorkspaceId) {
       void loadAnalysisHistory(authUser.id, activeWorkspaceId);
+      void loadPRReviewHistory(authUser.id, activeWorkspaceId);
     }
-  }, [authUser, activeWorkspaceId, loadAnalysisHistory]);
+  }, [authUser, activeWorkspaceId, loadAnalysisHistory, loadPRReviewHistory]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -1288,6 +1306,7 @@ ${errorMessage}`);
       );
 
       setPrReviewResult(review);
+      setPrReviewFiles(files.map(f => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions })));
       setPrReviewMeta({
         number: prNumber,
         title: prTitle,
@@ -1295,6 +1314,24 @@ ${errorMessage}`);
       });
       setActiveTab('pr-review');
       addLog(`PR review completed for #${prNumber}.`, 'success');
+
+      if (authEnabled && authUser && repo) {
+        void savePRReview({
+          userId: authUser.id,
+          organizationId: activeWorkspaceId || null,
+          repoOwner: repo.owner,
+          repoName: repo.repo,
+          prNumber,
+          prTitle,
+          fileCount: files.length,
+          review
+        })
+          .then(() => {
+            addLog('PR review saved to your profile', 'success');
+            void loadPRReviewHistory(authUser.id, activeWorkspaceId || undefined);
+          })
+          .catch((err) => addLog(`Failed to save PR review: ${getErrorText(err)}`, 'error'));
+      }
     } catch (err) {
       addLog(`PR review failed: ${getErrorText(err)}`, 'error');
     } finally {
@@ -2286,6 +2323,54 @@ ${errorMessage}`);
                      </div>
                    </div>
 
+                   {authUser && (prReviewHistory.length > 0 || prHistoryLoading) && !prReviewResult && !prReviewLoading && (
+                     <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                       <h4 className="text-lg font-black text-white mb-6 flex items-center gap-3">
+                         <Activity className="w-5 h-5 text-indigo-400" /> Past Reviews
+                       </h4>
+                       {prHistoryLoading ? (
+                         <div className="space-y-3">
+                           {[1, 2, 3].map((i) => (
+                             <div key={i} className="h-14 bg-slate-800/50 rounded-2xl animate-pulse" />
+                           ))}
+                         </div>
+                       ) : (
+                         <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                           {prReviewHistory.map((r) => (
+                             <button
+                               key={r.id}
+                               onClick={() => {
+                                 setPrReviewUrl(`https://github.com/${r.repoOwner}/${r.repoName}/pull/${r.prNumber}`);
+                               }}
+                               className="w-full text-left bg-slate-950/60 hover:bg-slate-800/60 border border-slate-800 hover:border-indigo-500/40 rounded-2xl p-4 transition-all group"
+                             >
+                               <div className="flex items-center justify-between mb-1">
+                                 <span className="text-white font-bold text-sm group-hover:text-indigo-300 transition-colors">
+                                   {r.repoOwner}/{r.repoName} #{r.prNumber}
+                                 </span>
+                                 <span className={`text-[9px] px-2 py-1 rounded font-black uppercase tracking-widest ${
+                                   r.riskLevel === 'high'
+                                     ? 'bg-rose-500/15 text-rose-300'
+                                     : r.riskLevel === 'medium'
+                                       ? 'bg-amber-500/15 text-amber-300'
+                                       : 'bg-emerald-500/15 text-emerald-300'
+                                 }`}>
+                                   {r.riskLevel}
+                                 </span>
+                               </div>
+                               <p className="text-slate-500 text-xs line-clamp-1">{r.prTitle}</p>
+                               <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-600">
+                                 <span>{r.fileCount} files</span>
+                                 <span>•</span>
+                                 <span>{new Date(r.createdAt).toLocaleDateString()}</span>
+                               </div>
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   )}
+
                    {prReviewLoading && (
                      <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl">
                        <Loader message="Analyzing pull request changes..." />
@@ -2326,6 +2411,31 @@ ${errorMessage}`);
                            </ul>
                          )}
                        </div>
+
+                       {prReviewFiles.length > 0 && (
+                         <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                           <h4 className="text-lg font-black text-white mb-6">Changed Files ({prReviewFiles.length})</h4>
+                           <div className="space-y-1 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                             {prReviewFiles.map((f) => (
+                               <div key={f.filename} className="flex items-center justify-between px-4 py-2 rounded-xl hover:bg-slate-800/40 transition-colors group">
+                                 <div className="flex items-center gap-2 min-w-0">
+                                   <span className={`text-[9px] font-black uppercase w-14 text-center px-1 py-0.5 rounded ${
+                                     f.status === 'added' ? 'bg-emerald-500/15 text-emerald-400'
+                                     : f.status === 'removed' ? 'bg-rose-500/15 text-rose-400'
+                                     : f.status === 'renamed' ? 'bg-sky-500/15 text-sky-400'
+                                     : 'bg-amber-500/15 text-amber-400'
+                                   }`}>{f.status}</span>
+                                   <span className="text-slate-300 text-xs truncate">{f.filename}</span>
+                                 </div>
+                                 <div className="flex items-center gap-2 text-[10px] font-mono shrink-0">
+                                   {f.additions > 0 && <span className="text-emerald-400">+{f.additions}</span>}
+                                   {f.deletions > 0 && <span className="text-rose-400">-{f.deletions}</span>}
+                                 </div>
+                               </div>
+                             ))}
+                           </div>
+                         </div>
+                       )}
 
                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                          <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">

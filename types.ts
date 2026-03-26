@@ -301,3 +301,14 @@ export interface SavedAnalysis {
   scorecard: Scorecard | null;
   createdAt: string;
 }
+
+export interface SavedPRReview {
+  id: string;
+  repoOwner: string;
+  repoName: string;
+  prNumber: number;
+  prTitle: string;
+  fileCount: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  createdAt: string;
+}

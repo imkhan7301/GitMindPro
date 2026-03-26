@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { AnalysisResult, SavedAnalysis, Workspace, WorkspaceInvitation, WorkspaceMember } from '../types';
+import { AnalysisResult, PRReviewResult, SavedAnalysis, SavedPRReview, Workspace, WorkspaceInvitation, WorkspaceMember } from '../types';
 
 // Fallback values are anon/public and keep auth working if a deployment misses env injection.
 const fallbackSupabaseUrl = 'https://kkdgrbixapjlpynuulie.supabase.co';
@@ -476,6 +476,72 @@ export const getAnalysisHistory = async (params: {
     summary: (row.summary ?? '') as string,
     techStack: (row.tech_stack ?? []) as string[],
     scorecard: row.scorecard as SavedAnalysis['scorecard'],
+    createdAt: row.created_at as string,
+  }));
+};
+
+export const savePRReview = async (params: {
+  userId: string;
+  organizationId?: string | null;
+  repoOwner: string;
+  repoName: string;
+  prNumber: number;
+  prTitle: string;
+  fileCount: number;
+  review: PRReviewResult;
+}): Promise<void> => {
+  const supabase = getClient();
+
+  const { error } = await supabase.from('pr_reviews').insert({
+    user_id: params.userId,
+    organization_id: params.organizationId ?? null,
+    repo_owner: params.repoOwner,
+    repo_name: params.repoName,
+    pr_number: params.prNumber,
+    pr_title: params.prTitle,
+    file_count: params.fileCount,
+    risk_level: params.review.riskLevel,
+    review_result: params.review
+  });
+
+  if (error) {
+    throw new Error(`Failed to save PR review: ${error.message}`);
+  }
+};
+
+export const getPRReviewHistory = async (params: {
+  userId: string;
+  organizationId?: string | null;
+  limit?: number;
+}): Promise<SavedPRReview[]> => {
+  const supabase = getClient();
+  const pageSize = params.limit ?? 20;
+
+  let query = supabase
+    .from('pr_reviews')
+    .select('id, repo_owner, repo_name, pr_number, pr_title, file_count, risk_level, created_at')
+    .eq('user_id', params.userId)
+    .order('created_at', { ascending: false })
+    .limit(pageSize);
+
+  if (params.organizationId) {
+    query = query.eq('organization_id', params.organizationId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to load PR review history: ${error.message}`);
+  }
+
+  return (data || []).map((row) => ({
+    id: String(row.id),
+    repoOwner: row.repo_owner as string,
+    repoName: row.repo_name as string,
+    prNumber: row.pr_number as number,
+    prTitle: row.pr_title as string,
+    fileCount: row.file_count as number,
+    riskLevel: row.risk_level as SavedPRReview['riskLevel'],
     createdAt: row.created_at as string,
   }));
 };

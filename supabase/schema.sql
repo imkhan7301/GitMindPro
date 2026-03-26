@@ -77,6 +77,55 @@ create index if not exists idx_projects_org on public.projects(organization_id);
 create index if not exists idx_workspace_invitations_org on public.workspace_invitations(organization_id, created_at desc);
 create index if not exists idx_workspace_invitations_email on public.workspace_invitations(lower(invited_email));
 
+create table if not exists public.pr_reviews (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  organization_id uuid references public.organizations(id) on delete set null,
+  repo_owner text not null,
+  repo_name text not null,
+  pr_number integer not null,
+  pr_title text not null,
+  file_count integer not null default 0,
+  risk_level text not null check (risk_level in ('low', 'medium', 'high')),
+  review_result jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_pr_reviews_user_created on public.pr_reviews(user_id, created_at desc);
+create index if not exists idx_pr_reviews_org_created on public.pr_reviews(organization_id, created_at desc);
+
+alter table public.pr_reviews enable row level security;
+
+create policy if not exists "pr_reviews_select_own"
+  on public.pr_reviews for select
+  using (
+    auth.uid() = user_id
+    and (
+      organization_id is null
+      or exists (
+        select 1
+        from public.organization_memberships m
+        where m.organization_id = pr_reviews.organization_id
+          and m.user_id = auth.uid()
+      )
+    )
+  );
+
+create policy if not exists "pr_reviews_insert_own"
+  on public.pr_reviews for insert
+  with check (
+    auth.uid() = user_id
+    and (
+      organization_id is null
+      or exists (
+        select 1
+        from public.organization_memberships m
+        where m.organization_id = pr_reviews.organization_id
+          and m.user_id = auth.uid()
+      )
+    )
+  );
+
 alter table public.profiles enable row level security;
 alter table public.analyses enable row level security;
 alter table public.organizations enable row level security;
