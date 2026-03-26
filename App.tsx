@@ -186,6 +186,9 @@ const App: React.FC = () => {
   const [showPricing, setShowPricing] = useState(false);
   const [checkoutBanner, setCheckoutBanner] = useState<{ type: 'success' | 'canceled'; plan?: string; trial?: boolean } | null>(null);
   const freeDailyAnalysisLimit = getEffectiveDailyLimit(subscription);
+
+  // Usage tracking for authenticated users
+  const [dailyUsage, setDailyUsage] = useState<{ used: number; limit: number } | null>(null);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -383,6 +386,10 @@ const App: React.FC = () => {
           // Load subscription status
           const sub = await getSubscriptionStatus(user.id).catch(() => ({ plan: 'free' as const, status: 'none' as const, currentPeriodEnd: null, isActive: false }));
           setSubscription(sub);
+          // Load daily usage
+          const effectiveLimit = getEffectiveDailyLimit(sub);
+          const usage = await canAnalyzeToday(user.id, effectiveLimit).catch(() => ({ usedToday: 0, limit: effectiveLimit, allowed: true }));
+          setDailyUsage({ used: usage.usedToday, limit: usage.limit });
         }
       } catch (err) {
         addLog(`Auth session init failed: ${getErrorText(err)}`, 'error');
@@ -814,6 +821,7 @@ const App: React.FC = () => {
             return;
           }
           addLog(`Daily usage: ${usage.usedToday}/${usage.limit} analyses used`, 'info');
+          setDailyUsage({ used: usage.usedToday, limit: usage.limit });
         } catch (err) {
           addLog(`Usage check failed (${getErrorText(err)}). Continuing without quota enforcement.`, 'error');
         }
@@ -899,6 +907,9 @@ const App: React.FC = () => {
         if (newStatus.used >= newStatus.limit) {
           setShowSignupPrompt(true);
         }
+      } else {
+        // Update daily usage for authenticated users
+        setDailyUsage(prev => prev ? { ...prev, used: prev.used + 1 } : { used: 1, limit: freeDailyAnalysisLimit });
       }
       
       if (authEnabled && authUser) {
@@ -1641,23 +1652,75 @@ ${errorMessage}`);
                     {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
                   </span>
                   {subscription.isActive ? (
-                    <button
-                      onClick={() => void openBillingPortal(authUser.id)}
-                      className={`flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                        subscription.plan === 'team'
-                          ? 'bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:text-white'
-                          : 'bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 hover:text-white'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4" /> {subscription.plan === 'team' ? 'Team' : 'Pro'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => void openBillingPortal(authUser.id)}
+                        className={`flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                          subscription.plan === 'team'
+                            ? 'bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:text-white'
+                            : 'bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 hover:text-white'
+                        }`}
+                      >
+                        <CreditCard className="w-4 h-4" /> {subscription.plan === 'team' ? 'Team' : 'Pro'}
+                      </button>
+                      <div className="px-3 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1.5">
+                        <Activity className="w-3 h-3" /> Unlimited
+                      </div>
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => setShowPricing(true)}
-                      className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:text-white animate-pulse"
-                    >
-                      <Zap className="w-4 h-4" /> Upgrade
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {dailyUsage && (
+                        <div
+                          className="relative px-3 py-2.5 rounded-2xl border text-[10px] font-black uppercase tracking-widest cursor-pointer transition-all hover:scale-105"
+                          onClick={() => setShowPricing(true)}
+                          style={{
+                            background: dailyUsage.used >= dailyUsage.limit
+                              ? 'rgba(239,68,68,0.1)'
+                              : dailyUsage.used >= dailyUsage.limit - 1
+                              ? 'rgba(245,158,11,0.1)'
+                              : 'rgba(15,23,42,1)',
+                            borderColor: dailyUsage.used >= dailyUsage.limit
+                              ? 'rgba(239,68,68,0.4)'
+                              : dailyUsage.used >= dailyUsage.limit - 1
+                              ? 'rgba(245,158,11,0.4)'
+                              : 'rgba(30,41,59,1)',
+                            color: dailyUsage.used >= dailyUsage.limit
+                              ? 'rgb(252,165,165)'
+                              : dailyUsage.used >= dailyUsage.limit - 1
+                              ? 'rgb(252,211,77)'
+                              : 'rgb(148,163,184)',
+                          }}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Activity className="w-3 h-3" />
+                            <span>{dailyUsage.used}/{dailyUsage.limit} today</span>
+                          </div>
+                          <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${Math.min(100, (dailyUsage.used / dailyUsage.limit) * 100)}%`,
+                                background: dailyUsage.used >= dailyUsage.limit
+                                  ? '#ef4444'
+                                  : dailyUsage.used >= dailyUsage.limit - 1
+                                  ? '#f59e0b'
+                                  : '#6366f1',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setShowPricing(true)}
+                        className={`flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                          dailyUsage && dailyUsage.used >= dailyUsage.limit
+                            ? 'bg-red-500/20 border border-red-500/40 text-red-300 hover:text-white animate-pulse'
+                            : 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:text-white'
+                        }`}
+                      >
+                        <Zap className="w-4 h-4" /> {dailyUsage && dailyUsage.used >= dailyUsage.limit ? 'Limit Hit — Upgrade' : 'Upgrade'}
+                      </button>
+                    </div>
                   )}
                   <button
                     onClick={handleSignOut}
@@ -1678,8 +1741,55 @@ ${errorMessage}`);
               )}
             </div>
             {!authUser && !authLoading && (
-              <div className="px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-400">
-                {freeTierStatus.remaining} / {freeTierStatus.limit} free remaining
+              <div
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setShowSignupPrompt(true)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '16px',
+                  fontSize: '10px',
+                  fontWeight: 900,
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.1em',
+                  background: freeTierStatus.remaining === 0
+                    ? 'rgba(239,68,68,0.1)'
+                    : freeTierStatus.remaining === 1
+                    ? 'rgba(245,158,11,0.1)'
+                    : 'rgba(245,158,11,0.05)',
+                  border: `1px solid ${
+                    freeTierStatus.remaining === 0
+                      ? 'rgba(239,68,68,0.4)'
+                      : freeTierStatus.remaining === 1
+                      ? 'rgba(245,158,11,0.4)'
+                      : 'rgba(245,158,11,0.3)'
+                  }`,
+                  color: freeTierStatus.remaining === 0
+                    ? 'rgb(252,165,165)'
+                    : freeTierStatus.remaining === 1
+                    ? 'rgb(252,211,77)'
+                    : 'rgb(251,191,36)',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="w-3 h-3" />
+                  <span>{freeTierStatus.used}/{freeTierStatus.limit} used</span>
+                </div>
+                <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(30,41,59,1)' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, (freeTierStatus.used / freeTierStatus.limit) * 100)}%`,
+                      background: freeTierStatus.remaining === 0
+                        ? '#ef4444'
+                        : freeTierStatus.remaining === 1
+                        ? '#f59e0b'
+                        : '#6366f1',
+                    }}
+                  />
+                </div>
+                {freeTierStatus.remaining === 0 && (
+                  <div className="text-[8px] mt-1 text-red-400">Sign in to continue</div>
+                )}
               </div>
             )}
             <div className="flex items-center gap-2">
