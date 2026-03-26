@@ -1159,3 +1159,52 @@ export const analyzeTestingSetup = async (structure: string, readme: string) => 
     };
   }
 };
+
+export const generateFixSnippet = async (params: {
+  repository: string;
+  file: string;
+  title: string;
+  rationale: string;
+  recommendation: string;
+  patch?: string;
+}): Promise<{ explanation: string; code: string; language: string }> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const context = params.patch ? `\nRelevant patch:\n${params.patch.slice(0, 2000)}` : '';
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a senior engineer. Generate a concise, production-ready code fix.\n` +
+          `Repository: ${params.repository}\n` +
+          `File: ${params.file}\n` +
+          `Issue: ${params.title}\n` +
+          `Rationale: ${params.rationale}\n` +
+          `Recommendation: ${params.recommendation}${context}\n\n` +
+          `Return JSON only:\n` +
+          `{\n` +
+          `  "explanation": "1-2 sentence plain-English explanation of the fix",\n` +
+          `  "code": "the exact fix code snippet (no markdown fences, raw code only)",\n` +
+          `  "language": "the programming language (e.g. typescript, python, go)"\n` +
+          `}\n` +
+          `Rules:\n` +
+          `- code must be copy-paste ready (no placeholder text like <your-value>)\n` +
+          `- keep it minimal, target the specific issue only\n` +
+          `- language should match the file extension`
+      }]
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          explanation: { type: Type.STRING },
+          code: { type: Type.STRING },
+          language: { type: Type.STRING },
+        },
+        required: ['explanation', 'code', 'language'],
+      }
+    }
+  }, 'fix snippet');
+
+  return JSON.parse(response.text || '{}') as { explanation: string; code: string; language: string };
+};

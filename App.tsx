@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
@@ -37,8 +37,9 @@ import PRDiffViewer from './components/PRDiffViewer';
 import ScheduledReports from './components/ScheduledReports';
 import CustomScoringWeights from './components/CustomScoringWeights';
 import type { ScoringWeights } from './components/CustomScoringWeights';
+import PublicScorecardPage from './components/PublicScorecardPage';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2 } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -192,6 +193,7 @@ const App: React.FC = () => {
   const [prReviewResult, setPrReviewResult] = useState<PRReviewResult | null>(null);
   const [prReviewMeta, setPrReviewMeta] = useState<{ number: number; title: string; fileCount: number } | null>(null);
   const [prReviewFiles, setPrReviewFiles] = useState<{ filename: string; status: string; additions: number; deletions: number; patch?: string }[]>([]);
+  const [fixSnippets, setFixSnippets] = useState<Record<string, { explanation: string; code: string; language: string } | 'loading'>>({});
   
   // Free tier state
   const [freeTierStatus, setFreeTierStatus] = useState(getFreeTierStatus());
@@ -472,6 +474,32 @@ const App: React.FC = () => {
   const addLog = useCallback((message: string, type: TerminalLog['type'] = 'info') => {
     setTerminalLogs(prev => [...prev, { id: Math.random().toString(36), timestamp: Date.now(), type, message }].slice(-50));
   }, []);
+
+  const handleGetFix = useCallback(async (findingKey: string, params: {
+    file: string; title: string; rationale: string; recommendation: string;
+  }) => {
+    setFixSnippets(prev => ({ ...prev, [findingKey]: 'loading' }));
+    try {
+      const repoId = repo ? `${repo.owner}/${repo.repo}` : 'unknown';
+      const patchData = prReviewFiles.find(f => f.filename === params.file)?.patch;
+      const result = await generateFixSnippet({
+        repository: repoId,
+        file: params.file,
+        title: params.title,
+        rationale: params.rationale,
+        recommendation: params.recommendation,
+        patch: patchData,
+      });
+      setFixSnippets(prev => ({ ...prev, [findingKey]: result }));
+    } catch {
+      setFixSnippets(prev => {
+        const next = { ...prev };
+        delete next[findingKey];
+        return next;
+      });
+      addLog('Could not generate fix snippet', 'error');
+    }
+  }, [repo, prReviewFiles, addLog]);
 
   const handleShareAnalysis = useCallback(async () => {
     if (!lastAnalysisId) {
@@ -1690,6 +1718,7 @@ ${errorMessage}`);
     }
 
     setPrReviewLoading(true);
+    setFixSnippets({});
     addLog(`Loading PR #${prNumber} files...`, 'info');
 
     try {
@@ -1881,6 +1910,12 @@ ${errorMessage}`);
     : edges;
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) || null;
+
+  // Public share route
+  const shareRouteMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9_-]+)/);
+  if (shareRouteMatch) {
+    return <PublicScorecardPage shareToken={shareRouteMatch[1]} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30">
@@ -3143,6 +3178,44 @@ ${errorMessage}`);
                                  <div className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-indigo-200 text-xs leading-relaxed">
                                    {finding.recommendation}
                                  </div>
+                                 {/* AI Fix Snippet */}
+                                 {(() => {
+                                   const fkey = `${finding.file}-${index}`;
+                                   const fix = fixSnippets[fkey];
+                                   if (fix === 'loading') {
+                                     return (
+                                       <div className="flex items-center gap-2 text-xs text-slate-500">
+                                         <div className="w-3 h-3 border border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                         Generating fix...
+                                       </div>
+                                     );
+                                   }
+                                   if (fix && typeof fix === 'object') {
+                                     return (
+                                       <div className="space-y-2">
+                                         <p className="text-emerald-300 text-xs">{fix.explanation}</p>
+                                         <div className="relative bg-black/60 border border-slate-700 rounded-xl overflow-hidden">
+                                           <div className="flex items-center justify-between px-4 py-1.5 border-b border-slate-800">
+                                             <span className="text-[9px] font-bold text-slate-600 uppercase">{fix.language}</span>
+                                             <button
+                                               onClick={() => navigator.clipboard.writeText(fix.code).catch(() => {})}
+                                               className="text-[9px] font-bold text-slate-600 hover:text-indigo-400 transition-colors flex items-center gap-1"
+                                             ><Copy className="w-2.5 h-2.5" /> Copy</button>
+                                           </div>
+                                           <pre className="p-4 text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap leading-relaxed custom-scrollbar">{fix.code}</pre>
+                                         </div>
+                                       </div>
+                                     );
+                                   }
+                                   return (
+                                     <button
+                                       onClick={() => handleGetFix(fkey, { file: finding.file, title: finding.title, rationale: finding.rationale, recommendation: finding.recommendation })}
+                                       className="flex items-center gap-1.5 text-[10px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                                     >
+                                       <Wand2 className="w-3 h-3" /> Get AI Fix
+                                     </button>
+                                   );
+                                 })()}
                                </div>
                              ))}
                            </div>
