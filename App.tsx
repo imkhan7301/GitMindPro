@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -61,6 +61,13 @@ import type { GeneratedCommit } from './components/CommitMessageGenerator';
 import CodeExtractor from './components/CodeExtractor';
 import type { CodeExtraction } from './components/CodeExtractor';
 import PublicRepoGallery from './components/PublicRepoGallery';
+import ChangelogGenerator from './components/ChangelogGenerator';
+import type { GeneratedChangelog } from './components/ChangelogGenerator';
+import HealthTimeline from './components/HealthTimeline';
+import OnboardingChecklist from './components/OnboardingChecklist';
+import type { GeneratedOnboardingChecklist } from './components/OnboardingChecklist';
+import AgenticSecurityScanner from './components/AgenticSecurityScanner';
+import TestCoverageCard from './components/TestCoverageCard';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
@@ -451,6 +458,11 @@ const App: React.FC = () => {
 
   // Wave 17: Code Intelligence Extractor state
   const [codeExtractionLoading, setCodeExtractionLoading] = useState(false);
+
+  // Wave 18 state
+  const [onboardingChecklistLoading, setOnboardingChecklistLoading] = useState(false);
+  const [testCoverageLoading, setTestCoverageLoading] = useState(false);
+  const [agenticScanLoading, setAgenticScanLoading] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -1086,6 +1098,92 @@ const App: React.FC = () => {
       setCodeExtractionLoading(false);
     }
   }, [addLog]);
+
+  // Wave 18: Changelog Generator handler
+  const handleGenerateChangelog = useCallback(async (commits: string, repoName?: string): Promise<GeneratedChangelog> => {
+    try {
+      const result = await generateChangelog(commits, repoName);
+      addLog('Changelog generated', 'success');
+      return result;
+    } catch (err) {
+      addLog(`Changelog failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    }
+  }, [addLog]);
+
+  // Wave 18: Onboarding Checklist handler
+  const handleGenerateOnboardingChecklist = useCallback(async (): Promise<GeneratedOnboardingChecklist> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setOnboardingChecklistLoading(true);
+    try {
+      const result = await generateOnboardingChecklist({
+        repoName: `${repo.owner}/${repo.repo}`,
+        summary: analysis.summary,
+        techStack: analysis.techStack,
+        vibeMode,
+        learningPath: onboardingGuide?.criticalFiles,
+      });
+      addLog('Onboarding checklist generated', 'success');
+      return result;
+    } catch (err) {
+      addLog(`Onboarding checklist failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setOnboardingChecklistLoading(false);
+    }
+  }, [analysis, repo, vibeMode, onboardingGuide, addLog]);
+
+  // Wave 18: Test Coverage Estimator handler
+  const handleEstimateTestCoverage = useCallback(async (): Promise<import('./services/geminiService').TestCoverageData> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setTestCoverageLoading(true);
+    try {
+      const allPaths = structure.length > 0
+        ? structure.flatMap(function flatPaths(n: FileNode): string[] {
+            return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+          })
+        : [];
+      const result = await estimateTestCoverage({
+        fileTree: allPaths,
+        techStack: analysis.techStack,
+        repoName: `${repo.owner}/${repo.repo}`,
+      });
+      addLog(`Test coverage estimated: ~${result.overallEstimate}%`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Test coverage estimation failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setTestCoverageLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 18: Agentic Security Scanner handler
+  const handleScanAgenticRisks = useCallback(async (): Promise<import('./components/AgenticSecurityScanner').AgenticSecurityScanResult> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setAgenticScanLoading(true);
+    try {
+      const allPaths = structure.length > 0
+        ? structure.flatMap(function flatPaths(n: FileNode): string[] {
+            return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+          })
+        : [];
+      const result = await scanAgenticRisks({
+        repoName: `${repo.owner}/${repo.repo}`,
+        summary: analysis.summary,
+        techStack: analysis.techStack,
+        fileTree: allPaths,
+        securityInsights: deepAudit?.vulnerabilities,
+      });
+      addLog(`Agentic security scan complete: ${result.findings.length} findings`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Agentic scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setAgenticScanLoading(false);
+    }
+  }, [analysis, repo, structure, deepAudit, addLog]);
 
   const handleGetFix = useCallback(async (findingKey: string, params: {
     file: string; title: string; rationale: string; recommendation: string;
@@ -3485,6 +3583,14 @@ ${errorMessage}`);
                             </div>
                           </div>
                         )}
+
+                        {/* Wave 18: Smart Onboarding Checklist */}
+                        <OnboardingChecklist
+                          onGenerate={handleGenerateOnboardingChecklist}
+                          loading={onboardingChecklistLoading}
+                          repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                          vibeMode={vibeMode}
+                        />
                       </>
                     ) : analysis ? (
                       <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl">
@@ -4360,6 +4466,23 @@ ${errorMessage}`);
                           <button onClick={runAudit} className="px-8 py-4 bg-amber-600/20 border border-amber-500/30 text-amber-400 font-black rounded-2xl">Trigger Deep Reasoning</button>
                        </div>
                     )}
+
+                    {/* Wave 18: OWASP Agentic Security Scanner */}
+                    <div className="mt-10">
+                      <AgenticSecurityScanner
+                        onScan={handleScanAgenticRisks}
+                        loading={agenticScanLoading}
+                      />
+                    </div>
+
+                    {/* Wave 18: AI Test Coverage Estimator */}
+                    <div className="mt-8">
+                      <TestCoverageCard
+                        onEstimate={handleEstimateTestCoverage}
+                        loading={testCoverageLoading}
+                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                      />
+                    </div>
                  </div>
                )}
 
@@ -4726,6 +4849,13 @@ ${errorMessage}`);
                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
                      />
                    </div>
+
+                   {/* ── Wave 18: AI Changelog Generator ── */}
+                   <ChangelogGenerator
+                     onGenerate={handleGenerateChangelog}
+                     repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                     recentCommits={[]}
+                   />
                  </div>
                )}
 
@@ -5015,6 +5145,8 @@ ${errorMessage}`);
               <CompareRepos />
             ) : dashboardTab === 'health' ? (
               <div className="space-y-8">
+                {/* Wave 18: Health Score Timeline */}
+                <HealthTimeline history={analysisHistory} />
                 <HealthDashboard
                   history={analysisHistory}
                   watchedRepos={watchedRepos}

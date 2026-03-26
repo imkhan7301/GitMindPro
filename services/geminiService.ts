@@ -2000,3 +2000,325 @@ Based on the query, identify and extract the most relevant piece of code. Then p
     refactoringTip: parsed.refactoringTip || '',
   };
 };
+
+// ── Wave 18: AI Changelog Generator ──────────────────────────────────────────
+export interface GeneratedChangelogData {
+  version: string;
+  added: string[];
+  fixed: string[];
+  improved: string[];
+  breaking: string[];
+  fullMarkdown: string;
+}
+
+export const generateChangelog = async (commits: string, repoName?: string): Promise<GeneratedChangelogData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('generateChangelog');
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are a developer relations expert. Analyze these git commits for ${repoName || 'a repository'} and generate a professional CHANGELOG entry.
+
+Commits:
+${commits}
+
+Categorize into: Added (new features), Fixed (bug fixes), Improved (enhancements), Breaking (breaking changes).
+Generate a semantic version number based on the nature of changes (major for breaking, minor for features, patch for fixes).
+Also generate a clean full Markdown CHANGELOG entry.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          version: { type: Type.STRING },
+          added: { type: Type.ARRAY, items: { type: Type.STRING } },
+          fixed: { type: Type.ARRAY, items: { type: Type.STRING } },
+          improved: { type: Type.ARRAY, items: { type: Type.STRING } },
+          breaking: { type: Type.ARRAY, items: { type: Type.STRING } },
+          fullMarkdown: { type: Type.STRING },
+        },
+        required: ['version', 'added', 'fixed', 'improved', 'breaking', 'fullMarkdown'],
+      }
+    }
+  }, 'changelog generator');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    version: parsed.version || '1.0.0',
+    added: parsed.added || [],
+    fixed: parsed.fixed || [],
+    improved: parsed.improved || [],
+    breaking: parsed.breaking || [],
+    fullMarkdown: parsed.fullMarkdown || '',
+  };
+};
+
+// ── Wave 18: Smart Onboarding Checklist ─────────────────────────────────────
+export interface OnboardingChecklistData {
+  repoName: string;
+  vibeMode: string;
+  summary: string;
+  tasks: {
+    id: string;
+    day: number;
+    title: string;
+    description: string;
+    category: 'explore' | 'understand' | 'build' | 'review' | 'deploy';
+    estimateMinutes: number;
+    files: string[];
+  }[];
+}
+
+export const generateOnboardingChecklist = async (params: {
+  repoName: string;
+  summary: string;
+  techStack: string[];
+  vibeMode: string;
+  learningPath?: string[];
+}): Promise<OnboardingChecklistData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('generateOnboardingChecklist');
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are an expert engineering onboarding coach. Generate a personalized 3-day onboarding checklist for a developer joining this repository.
+
+Repository: ${params.repoName}
+Summary: ${params.summary}
+Tech Stack: ${params.techStack.join(', ')}
+Developer Role/Mode: ${params.vibeMode}
+${params.learningPath ? `Key Files: ${params.learningPath.slice(0, 8).join(', ')}` : ''}
+
+Generate 3–4 tasks per day (9–12 tasks total) spread across Day 1, 2, and 3.
+Tasks must be specific, actionable, and tailored to the tech stack and role.
+Categories: explore, understand, build, review, deploy.
+Estimate realistic time in minutes per task.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          repoName: { type: Type.STRING },
+          vibeMode: { type: Type.STRING },
+          summary: { type: Type.STRING },
+          tasks: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                day: { type: Type.NUMBER },
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+                category: { type: Type.STRING },
+                estimateMinutes: { type: Type.NUMBER },
+                files: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: ['id', 'day', 'title', 'description', 'category', 'estimateMinutes', 'files'],
+            }
+          },
+        },
+        required: ['repoName', 'vibeMode', 'summary', 'tasks'],
+      }
+    }
+  }, 'onboarding checklist');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    repoName: parsed.repoName || params.repoName,
+    vibeMode: parsed.vibeMode || params.vibeMode,
+    summary: parsed.summary || '',
+    tasks: (parsed.tasks || []).map((t: OnboardingChecklistData['tasks'][0], i: number) => ({
+      id: t.id || `task-${i}`,
+      day: t.day || 1,
+      title: t.title || '',
+      description: t.description || '',
+      category: t.category || 'explore',
+      estimateMinutes: t.estimateMinutes || 15,
+      files: t.files || [],
+    })),
+  };
+};
+
+// ── Wave 18: AI Test Coverage Estimator ─────────────────────────────────────
+export interface TestCoverageData {
+  overallEstimate: number; // 0–100
+  summary: string;
+  modules: {
+    name: string;
+    coverageEstimate: number;
+    hasTests: boolean;
+    testFiles: string[];
+    risk: 'low' | 'medium' | 'high';
+    suggestion: string;
+  }[];
+  uncoveredHotZones: string[];
+  recommendation: string;
+}
+
+export const estimateTestCoverage = async (params: {
+  fileTree: string[];
+  techStack: string[];
+  repoName: string;
+}): Promise<TestCoverageData> => {
+  const testFiles = params.fileTree.filter(f =>
+    f.includes('.test.') || f.includes('.spec.') || f.includes('__tests__') || f.includes('/test/')
+  );
+  const sourceFiles = params.fileTree.filter(f =>
+    (f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js') || f.endsWith('.jsx') || f.endsWith('.py')) &&
+    !testFiles.includes(f)
+  );
+
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('estimateTestCoverage');
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are a senior QA engineer and test coverage expert. Analyze this repository's file structure and estimate test coverage.
+
+Repository: ${params.repoName}
+Tech Stack: ${params.techStack.join(', ')}
+
+Source Files (${sourceFiles.length} total):
+${sourceFiles.slice(0, 40).join('\n')}
+
+Test Files Found (${testFiles.length} total):
+${testFiles.slice(0, 20).join('\n')}
+
+Based on the file structure and naming conventions, estimate test coverage per module.
+Identify which key areas (auth, API, payments, UI, etc.) have no tests.
+Flag high-risk uncovered areas as uncoveredHotZones.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          overallEstimate: { type: Type.NUMBER },
+          summary: { type: Type.STRING },
+          modules: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                coverageEstimate: { type: Type.NUMBER },
+                hasTests: { type: Type.BOOLEAN },
+                testFiles: { type: Type.ARRAY, items: { type: Type.STRING } },
+                risk: { type: Type.STRING },
+                suggestion: { type: Type.STRING },
+              },
+              required: ['name', 'coverageEstimate', 'hasTests', 'testFiles', 'risk', 'suggestion'],
+            }
+          },
+          uncoveredHotZones: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendation: { type: Type.STRING },
+        },
+        required: ['overallEstimate', 'summary', 'modules', 'uncoveredHotZones', 'recommendation'],
+      }
+    }
+  }, 'test coverage estimator');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    overallEstimate: Math.min(100, Math.max(0, parsed.overallEstimate || 0)),
+    summary: parsed.summary || '',
+    modules: parsed.modules || [],
+    uncoveredHotZones: parsed.uncoveredHotZones || [],
+    recommendation: parsed.recommendation || '',
+  };
+};
+
+// ── Wave 18: OWASP Agentic Security Scanner ──────────────────────────────────
+export interface AgenticScanData {
+  riskSummary: string;
+  overallRisk: 'critical' | 'high' | 'medium' | 'low';
+  agenticReadinessScore: number;
+  findings: {
+    asiCode: string;
+    title: string;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    description: string;
+    evidence: string;
+    recommendation: string;
+  }[];
+}
+
+export const scanAgenticRisks = async (params: {
+  repoName: string;
+  summary: string;
+  techStack: string[];
+  fileTree: string[];
+  securityInsights?: string[];
+}): Promise<AgenticScanData> => {
+  const agentRelatedFiles = params.fileTree.filter(f =>
+    f.includes('agent') || f.includes('tool') || f.includes('mcp') || f.includes('llm') ||
+    f.includes('ai') || f.includes('openai') || f.includes('anthropic') || f.includes('gemini') ||
+    f.includes('eval') || f.includes('exec') || f.includes('shell')
+  );
+
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('scanAgenticRisks');
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are an expert in agentic AI security, familiar with the OWASP Top 10 for Agentic Applications 2026 (ASI01–ASI10).
+
+Analyze this repository for agentic security risks:
+
+Repository: ${params.repoName}
+Summary: ${params.summary}
+Tech Stack: ${params.techStack.join(', ')}
+Agent-related files: ${agentRelatedFiles.join(', ') || 'none detected'}
+All files sample: ${params.fileTree.slice(0, 50).join(', ')}
+${params.securityInsights ? `Existing security notes: ${params.securityInsights.join('; ')}` : ''}
+
+OWASP Agentic Top 10 (2026) to check:
+ASI01: Agent Goal Hijack - missing input validation, prompt injection vectors
+ASI02: Tool Misuse - unconstrained exec/shell, missing arg validation
+ASI03: Identity & Privilege Abuse - hardcoded credentials, over-broad API scopes
+ASI04: Agentic Supply Chain - unpinned deps, unverified dynamic loaders, missing lockfiles
+ASI05: Unexpected Code Execution - eval(), exec(), dynamic imports, shell injection
+ASI06: Memory & Context Poisoning - unprotected storage, unsanitized inputs to LLMs
+ASI07: Insecure Inter-Agent Communication - unencrypted channels, missing auth
+ASI08: Cascading Failures - no error boundaries, missing circuit breakers
+ASI09: Human-Agent Trust Exploitation - missing confidence scores, no source attribution
+ASI10: Rogue Agents - no audit logs, no monitoring, unchecked autonomous loops
+
+Only report findings where there is actual evidence. Do not invent findings.
+Compute an agenticReadinessScore (0–100, higher = safer for agentic workflows).` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          riskSummary: { type: Type.STRING },
+          overallRisk: { type: Type.STRING },
+          agenticReadinessScore: { type: Type.NUMBER },
+          findings: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                asiCode: { type: Type.STRING },
+                title: { type: Type.STRING },
+                severity: { type: Type.STRING },
+                description: { type: Type.STRING },
+                evidence: { type: Type.STRING },
+                recommendation: { type: Type.STRING },
+              },
+              required: ['asiCode', 'title', 'severity', 'description', 'evidence', 'recommendation'],
+            }
+          },
+        },
+        required: ['riskSummary', 'overallRisk', 'agenticReadinessScore', 'findings'],
+      }
+    }
+  }, 'agentic security scanner');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    riskSummary: parsed.riskSummary || '',
+    overallRisk: parsed.overallRisk || 'medium',
+    agenticReadinessScore: Math.min(100, Math.max(0, parsed.agenticReadinessScore || 50)),
+    findings: (parsed.findings || []).map((f: AgenticScanData['findings'][0]) => ({
+      asiCode: f.asiCode || 'ASI01',
+      title: f.title || '',
+      severity: f.severity || 'medium',
+      description: f.description || '',
+      evidence: f.evidence || '',
+      recommendation: f.recommendation || '',
+    })),
+  };
+};
