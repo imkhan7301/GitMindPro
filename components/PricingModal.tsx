@@ -29,7 +29,7 @@ const PLANS = [
   },
   {
     name: 'Pro',
-    price: '$19',
+    price: '$9',
     period: '/month',
     icon: 'zap' as const,
     features: [
@@ -49,7 +49,7 @@ const PLANS = [
   },
   {
     name: 'Team',
-    price: '$99',
+    price: '$49',
     period: '/month',
     icon: 'users' as const,
     features: [

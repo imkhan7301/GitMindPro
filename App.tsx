@@ -444,7 +444,7 @@ const App: React.FC = () => {
     }
 
     if (!canCreateTeamWorkspace(subscription)) {
-      addLog('Team workspaces require a Team plan ($99/mo)', 'warning');
+      addLog('Team workspaces require a Team plan ($49/mo)', 'warning');
       setShowPricing(true);
       return;
     }

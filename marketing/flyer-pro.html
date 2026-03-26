@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitMind Pro — Pro Tier Flyer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .flyer { width: 1080px; min-height: 1350px; background: linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); padding: 80px; position: relative; overflow: hidden; }
+  .flyer::before { content: ''; position: absolute; top: -200px; right: -200px; width: 600px; height: 600px; background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%); }
+  .flyer::after { content: ''; position: absolute; bottom: -150px; left: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(168,85,247,0.1) 0%, transparent 70%); }
+  .content { position: relative; z-index: 1; }
+  .badge { display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 8px 24px; border-radius: 50px; font-size: 12px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 40px; }
+  h1 { font-size: 72px; font-weight: 900; line-height: 1.05; margin-bottom: 16px; }
+  h1 span { background: linear-gradient(135deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .tagline { font-size: 22px; color: #94a3b8; margin-bottom: 60px; line-height: 1.5; max-width: 600px; }
+  .price-block { display: flex; align-items: baseline; gap: 8px; margin-bottom: 50px; }
+  .price { font-size: 80px; font-weight: 900; color: #fff; }
+  .price-period { font-size: 24px; color: #64748b; font-weight: 600; }
+  .features { list-style: none; margin-bottom: 60px; }
+  .features li { display: flex; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid rgba(99,102,241,0.1); font-size: 20px; color: #cbd5e1; }
+  .features li:last-child { border-bottom: none; }
+  .check { width: 32px; height: 32px; background: rgba(16,185,129,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .check svg { width: 18px; height: 18px; color: #10b981; }
+  .cta { display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 20px 48px; border-radius: 16px; font-size: 18px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; text-decoration: none; }
+  .footer { margin-top: 50px; display: flex; justify-content: space-between; align-items: center; }
+  .logo { font-size: 28px; font-weight: 900; }
+  .logo span { color: #818cf8; }
+  .url { font-size: 16px; color: #64748b; }
+</style>
+</head>
+<body>
+<div class="flyer">
+  <div class="content">
+    <div class="badge">Pro Plan</div>
+    <h1>Understand Any<br>Codebase <span>Instantly.</span></h1>
+    <p class="tagline">AI-powered repository intelligence that reads your entire codebase — not just the README. Security audits, architecture blueprints, PR reviews, and more.</p>
+    
+    <div class="price-block">
+      <span class="price">$9</span>
+      <span class="price-period">/month</span>
+    </div>
+
+    <ul class="features">
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        Unlimited AI repository analyses
+      </li>
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        Deep security audit with remediation plans
+      </li>
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        Unlimited PR reviews with risk scoring
+      </li>
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        Interactive architecture blueprints
+      </li>
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        PDF export & full analysis history
+      </li>
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        AI Copilot — ask anything about the code
+      </li>
+      <li>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></div>
+        VS Code extension included
+      </li>
+    </ul>
+
+    <a href="https://gitmindpro.vercel.app" class="cta">Start Free → Upgrade Anytime</a>
+
+    <div class="footer">
+      <div class="logo">Git<span>Mind</span> Pro</div>
+      <div class="url">gitmindpro.vercel.app</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
