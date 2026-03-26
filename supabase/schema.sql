@@ -354,3 +354,28 @@ create policy if not exists "workspace_invitations_update_accept"
     and accepted_at is not null
     and lower(invited_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
+
+-- Referral system
+create table if not exists public.referrals (
+  id uuid primary key default gen_random_uuid(),
+  referrer_id uuid not null references public.profiles(id) on delete cascade,
+  referral_code text not null unique default lower(encode(gen_random_bytes(6), 'hex')),
+  referred_user_id uuid references public.profiles(id) on delete set null,
+  bonus_days integer not null default 7,
+  redeemed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_referrals_referrer on public.referrals(referrer_id);
+create unique index if not exists idx_referrals_code on public.referrals(referral_code);
+create index if not exists idx_referrals_referred on public.referrals(referred_user_id) where referred_user_id is not null;
+
+alter table public.referrals enable row level security;
+
+create policy if not exists "referrals_select_own"
+  on public.referrals for select
+  using (auth.uid() = referrer_id);
+
+create policy if not exists "referrals_insert_own"
+  on public.referrals for insert
+  with check (auth.uid() = referrer_id);

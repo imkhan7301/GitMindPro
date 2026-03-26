@@ -635,3 +635,46 @@ export const saveAnalysisRecordReturningId = async (params: {
   if (error || !data) throw new Error(`Failed to save analysis: ${error?.message || 'Unknown error'}`);
   return { id: String(data.id), shareToken: data.share_token as string };
 };
+
+// ─── Referral System ─────────────────────────────────────────────────
+
+export const getOrCreateReferralCode = async (userId: string): Promise<string> => {
+  const supabase = getClient();
+
+  // Check if user already has a referral code (where no one has redeemed it yet — the "template" row)
+  const { data: existing } = await supabase
+    .from('referrals')
+    .select('referral_code')
+    .eq('referrer_id', userId)
+    .limit(1)
+    .single();
+
+  if (existing?.referral_code) return existing.referral_code;
+
+  // Create new referral row
+  const { data, error } = await supabase
+    .from('referrals')
+    .insert({ referrer_id: userId })
+    .select('referral_code')
+    .single();
+
+  if (error || !data) throw new Error(`Failed to create referral code: ${error?.message || 'Unknown error'}`);
+  return data.referral_code as string;
+};
+
+export const getReferralStats = async (userId: string): Promise<{ count: number; daysEarned: number }> => {
+  const supabase = getClient();
+
+  const { data, error } = await supabase
+    .from('referrals')
+    .select('id, bonus_days, redeemed_at')
+    .eq('referrer_id', userId)
+    .not('referred_user_id', 'is', null);
+
+  if (error) return { count: 0, daysEarned: 0 };
+  const redeemed = (data || []).filter((r: { redeemed_at: string | null }) => r.redeemed_at);
+  return {
+    count: redeemed.length,
+    daysEarned: redeemed.reduce((sum: number, r: { bonus_days: number }) => sum + (r.bonus_days || 7), 0),
+  };
+};

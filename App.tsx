@@ -5,7 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
 import type { SubscriptionStatus } from './services/stripeService';
@@ -15,7 +15,7 @@ import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
 import AnalysisHistory from './components/AnalysisHistory';
 import PricingModal from './components/PricingModal';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -275,6 +275,9 @@ const App: React.FC = () => {
   const [lastAnalysisId, setLastAnalysisId] = useState<string | null>(null);
   const [, setLastShareToken] = useState<string | null>(null);
   const [isShared, setIsShared] = useState(false);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralCopied, setReferralCopied] = useState(false);
+  const [referralStats, setReferralStats] = useState<{ count: number; daysEarned: number }>({ count: 0, daysEarned: 0 });
 
   const exportAnalysisMarkdown = useCallback(() => {
     if (!repo || !analysis) return;
@@ -495,6 +498,11 @@ const App: React.FC = () => {
           const effectiveLimit = getEffectiveDailyLimit(sub);
           const usage = await canAnalyzeToday(user.id, effectiveLimit).catch(() => ({ usedToday: 0, limit: effectiveLimit, allowed: true }));
           setDailyUsage({ used: usage.usedToday, limit: usage.limit });
+          // Load referral code & stats
+          const refCode = await getOrCreateReferralCode(user.id).catch(() => null);
+          setReferralCode(refCode);
+          const refStats = await getReferralStats(user.id).catch(() => ({ count: 0, daysEarned: 0 }));
+          setReferralStats(refStats);
         }
       } catch (err) {
         addLog(`Auth session init failed: ${getErrorText(err)}`, 'error');
@@ -3352,7 +3360,177 @@ ${errorMessage}`);
             </div>
 
           </div>
+        ) : authUser ? (
+          /* ───── AUTHENTICATED DASHBOARD ───── */
+          <div className="max-w-7xl mx-auto py-12 px-8">
+            {/* Welcome Header */}
+            <div className="flex items-center justify-between mb-10">
+              <div>
+                <h1 className="text-3xl font-black text-white mb-1">Welcome back{authUser.user_metadata?.user_name ? `, ${authUser.user_metadata.user_name}` : ''}</h1>
+                <p className="text-slate-500 text-sm">Your AI-powered code intelligence hub</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowPricing(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all">
+                  <CreditCard className="w-3.5 h-3.5" /> {subscription.plan === 'free' ? 'Upgrade' : subscription.plan.toUpperCase()}
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 bg-indigo-500/15 rounded-xl flex items-center justify-center">
+                    <BarChart3 className="w-4.5 h-4.5 text-indigo-400" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Analyses</span>
+                </div>
+                <div className="text-2xl font-black text-white">{analysisHistory.length}</div>
+                <p className="text-xs text-slate-600 mt-1">Total repositories analyzed</p>
+              </div>
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 bg-emerald-500/15 rounded-xl flex items-center justify-center">
+                    <GitPullRequest className="w-4.5 h-4.5 text-emerald-400" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">PR Reviews</span>
+                </div>
+                <div className="text-2xl font-black text-white">{prReviewHistory.length}</div>
+                <p className="text-xs text-slate-600 mt-1">Pull requests reviewed</p>
+              </div>
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 bg-amber-500/15 rounded-xl flex items-center justify-center">
+                    <Zap className="w-4.5 h-4.5 text-amber-400" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Today</span>
+                </div>
+                <div className="text-2xl font-black text-white">{dailyUsage ? `${dailyUsage.used}/${dailyUsage.limit}` : '—'}</div>
+                <p className="text-xs text-slate-600 mt-1">Daily analyses used</p>
+              </div>
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 bg-violet-500/15 rounded-xl flex items-center justify-center">
+                    <Users className="w-4.5 h-4.5 text-violet-400" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Workspaces</span>
+                </div>
+                <div className="text-2xl font-black text-white">{workspaces.length}</div>
+                <p className="text-xs text-slate-600 mt-1">Active workspaces</p>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+              <button
+                onClick={() => document.querySelector('input')?.focus()}
+                className="group flex items-center gap-4 bg-indigo-600/10 border border-indigo-500/30 hover:border-indigo-500/60 rounded-2xl p-5 transition-all text-left"
+              >
+                <div className="w-11 h-11 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Plus className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm font-black text-white">New Analysis</div>
+                  <div className="text-xs text-slate-500">Paste a GitHub URL to analyze</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-indigo-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+              <button
+                onClick={() => {
+                  setUrl('https://github.com/facebook/react');
+                  setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100);
+                }}
+                className="group flex items-center gap-4 bg-slate-900/40 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 transition-all text-left"
+              >
+                <div className="w-11 h-11 bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Rocket className="w-5 h-5 text-slate-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-black text-white">Try Demo</div>
+                  <div className="text-xs text-slate-500">Analyze facebook/react</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+              <button
+                onClick={() => setShowPricing(true)}
+                className="group flex items-center gap-4 bg-slate-900/40 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 transition-all text-left"
+              >
+                <div className="w-11 h-11 bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="w-5 h-5 text-slate-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-black text-white">{subscription.plan === 'free' ? 'Upgrade Plan' : 'Manage Billing'}</div>
+                  <div className="text-xs text-slate-500">{subscription.plan === 'free' ? 'Unlock unlimited analyses' : `${subscription.plan} plan active`}</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            </div>
+
+            {/* Referral Card */}
+            <div className="bg-gradient-to-r from-indigo-950/40 to-violet-950/40 border border-indigo-500/20 rounded-2xl p-6 mb-10 flex flex-col md:flex-row items-center gap-6">
+              <div className="w-12 h-12 bg-indigo-600/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <Gift className="w-6 h-6 text-indigo-400" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-base font-black text-white mb-1">Invite Friends, Earn Pro Days</h3>
+                <p className="text-sm text-slate-400">Share your referral link. When a friend signs up, you both get <span className="text-indigo-400 font-bold">7 days of Pro free</span>.</p>
+                {referralStats.count > 0 && (
+                  <p className="text-xs text-emerald-400 mt-1 font-bold">{referralStats.count} referral{referralStats.count !== 1 ? 's' : ''} • {referralStats.daysEarned} bonus days earned</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-xs text-slate-300 font-mono select-all max-w-[220px] truncate">
+                  {referralCode ? `${window.location.origin}?ref=${referralCode}` : 'Loading...'}
+                </code>
+                <button
+                  onClick={() => {
+                    if (!referralCode) return;
+                    navigator.clipboard.writeText(`${window.location.origin}?ref=${referralCode}`);
+                    setReferralCopied(true);
+                    setTimeout(() => setReferralCopied(false), 2000);
+                  }}
+                  className="p-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all"
+                  title="Copy referral link"
+                >
+                  {referralCopied ? <CheckCircle2 className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4 text-white" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Analyses */}
+            {(analysisHistory.length > 0 || historyLoading) && (
+              <div className="mb-10">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-black text-white flex items-center gap-2"><Clock className="w-4 h-4 text-slate-500" /> Recent Analyses</h2>
+                </div>
+                <AnalysisHistory
+                  analyses={analysisHistory}
+                  loading={historyLoading}
+                  onSelect={(repoUrl) => {
+                    setUrl(repoUrl);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Empty State for new users */}
+            {analysisHistory.length === 0 && !historyLoading && (
+              <div className="text-center py-20 bg-slate-900/30 border border-slate-800 rounded-3xl">
+                <BrainCircuit className="w-16 h-16 text-indigo-500/30 mx-auto mb-6" />
+                <h3 className="text-xl font-black text-white mb-3">No analyses yet</h3>
+                <p className="text-slate-500 text-sm mb-6 max-w-md mx-auto">Paste any GitHub repository URL in the search bar above to get a full AI-powered analysis.</p>
+                <button
+                  onClick={() => document.querySelector('input')?.focus()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 px-8 rounded-2xl transition-all text-sm"
+                >
+                  Analyze Your First Repo
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
+          /* ───── PUBLIC LANDING PAGE ───── */
           <div className="max-w-7xl mx-auto py-20 px-8">
             {/* Hero Section */}
             <div className="text-center mb-24">
@@ -3429,20 +3607,6 @@ ${errorMessage}`);
                 </div>
               ))}
             </div>
-
-            {/* Analysis History (for logged-in users) */}
-            {authUser && (analysisHistory.length > 0 || historyLoading) && (
-              <div className="mb-24">
-                <AnalysisHistory
-                  analyses={analysisHistory}
-                  loading={historyLoading}
-                  onSelect={(repoUrl) => {
-                    setUrl(repoUrl);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                />
-              </div>
-            )}
 
             {/* Pricing Preview */}
             <div className="mb-24">
