@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { SavedAnalysis } from '../types';
 import { Activity } from 'lucide-react';
 import Sparkline from './Sparkline';
+import RepoTags from './RepoTags';
 
 interface AnalysisHistoryProps {
   analyses: SavedAnalysis[];
@@ -118,6 +119,9 @@ const AnalysisHistory: React.FC<AnalysisHistoryProps> = ({ analyses, loading, on
                 )}
               </div>
             )}
+            <div className="mt-1.5" onClick={e => e.stopPropagation()}>
+              <RepoTags repoKey={`${a.repoOwner}/${a.repoName}`} compact />
+            </div>
             {a.summary && (
               <p className="text-slate-500 text-xs mt-2 line-clamp-2 leading-relaxed">{a.summary.slice(0, 120)}{a.summary.length > 120 ? '...' : ''}</p>
             )}

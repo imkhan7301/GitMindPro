@@ -30,8 +30,11 @@ import ChangelogModal, { CHANGELOG_VERSION } from './components/ChangelogModal';
 import WebhookFeed from './components/WebhookFeed';
 import ActivityHeatmap from './components/ActivityHeatmap';
 import GlobalSearch from './components/GlobalSearch';
+import TeamActivityFeed from './components/TeamActivityFeed';
+import ExportHistoryCSV from './components/ExportHistoryCSV';
+import RepoTags from './components/RepoTags';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -328,6 +331,8 @@ const App: React.FC = () => {
   const [showAnalysisDiff, setShowAnalysisDiff] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [showTeamActivity, setShowTeamActivity] = useState(false);
+  const [showExportCSV, setShowExportCSV] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -3672,6 +3677,12 @@ ${errorMessage}`);
                 <p className="text-slate-500 text-sm">Your AI-powered code intelligence hub</p>
               </div>
               <div className="flex items-center gap-3">
+                <button onClick={() => setShowTeamActivity(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all" title="Team Activity Feed">
+                  <Users className="w-3.5 h-3.5" /> Team
+                </button>
+                <button onClick={() => setShowExportCSV(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all" title="Export History">
+                  <Download className="w-3.5 h-3.5" /> Export
+                </button>
                 <button onClick={() => setShowPricing(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all">
                   <CreditCard className="w-3.5 h-3.5" /> {subscription.plan === 'free' ? 'Upgrade' : subscription.plan.toUpperCase()}
                 </button>
@@ -3907,6 +3918,7 @@ ${errorMessage}`);
                     >
                       <RotateCw className="w-3 h-3 text-slate-600 group-hover:text-emerald-400 transition-colors" />
                       {a.repoOwner}/{a.repoName}
+                      <span onClick={e => e.stopPropagation()} className="ml-1"><RepoTags repoKey={`${a.repoOwner}/${a.repoName}`} compact /></span>
                     </button>
                   ))}
                 </div>
@@ -4161,6 +4173,8 @@ ${errorMessage}`);
           { id: 'settings', label: 'Settings', desc: 'Theme, notifications, API keys', icon: Settings, action: () => { setCmdPaletteOpen(false); setShowSettings(true); } },
           { id: 'changelog', label: "What's New", desc: 'Latest features and updates', icon: Sparkles, action: () => { setCmdPaletteOpen(false); setShowChangelog(true); } },
           { id: 'search', label: 'Search All Analyses', desc: 'Find past analyses and PR reviews', icon: Search, action: () => { setCmdPaletteOpen(false); setShowGlobalSearch(true); } },
+          { id: 'export', label: 'Export History', desc: 'Download analyses & PR reviews as CSV', icon: Download, action: () => { setCmdPaletteOpen(false); setShowExportCSV(true); } },
+          { id: 'team-feed', label: 'Team Activity', desc: 'See what your team is analyzing', icon: Users, action: () => { setCmdPaletteOpen(false); setShowTeamActivity(true); } },
           ...(analysisHistory.length >= 2 ? [{ id: 'diff', label: 'Analysis Diff', desc: 'Compare analyses over time', icon: BarChart3, action: () => { setCmdPaletteOpen(false); setShowAnalysisDiff(true); } }] : []),
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
           { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
@@ -4335,6 +4349,24 @@ ${errorMessage}`);
             if (!ok) setUrl(repoUrl);
           }}
           onClose={() => setShowGlobalSearch(false)}
+        />
+      )}
+
+      {/* Team Activity Feed */}
+      {showTeamActivity && authUser && activeWorkspaceId && (
+        <TeamActivityFeed
+          organizationId={activeWorkspaceId}
+          authUser={authUser}
+          onClose={() => setShowTeamActivity(false)}
+        />
+      )}
+
+      {/* Export History CSV */}
+      {showExportCSV && (
+        <ExportHistoryCSV
+          analyses={analysisHistory}
+          prReviews={prReviewHistory}
+          onClose={() => setShowExportCSV(false)}
         />
       )}
 
