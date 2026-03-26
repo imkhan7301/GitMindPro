@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks, analyzeDependencyIntelligence, detectBreakingChanges, predictPRMerge, generateAIBOM, scanSupplyChain } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -68,6 +68,16 @@ import OnboardingChecklist from './components/OnboardingChecklist';
 import type { GeneratedOnboardingChecklist } from './components/OnboardingChecklist';
 import AgenticSecurityScanner from './components/AgenticSecurityScanner';
 import TestCoverageCard from './components/TestCoverageCard';
+import DependencyIntelligence from './components/DependencyIntelligence';
+import type { DependencyReport } from './components/DependencyIntelligence';
+import BreakingChangeDetector from './components/BreakingChangeDetector';
+import type { BreakingChangeReport } from './components/BreakingChangeDetector';
+import PRMergePredictor from './components/PRMergePredictor';
+import type { PRMergePrediction } from './components/PRMergePredictor';
+import AIBOMGenerator from './components/AIBOMGenerator';
+import type { AIBOMReport } from './components/AIBOMGenerator';
+import SupplyChainScanner from './components/SupplyChainScanner';
+import type { SupplyChainScanResult } from './components/SupplyChainScanner';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
@@ -463,6 +473,13 @@ const App: React.FC = () => {
   const [onboardingChecklistLoading, setOnboardingChecklistLoading] = useState(false);
   const [testCoverageLoading, setTestCoverageLoading] = useState(false);
   const [agenticScanLoading, setAgenticScanLoading] = useState(false);
+
+  // Wave 19 state
+  const [depIntelLoading, setDepIntelLoading] = useState(false);
+  const [breakingChangeLoading, setBreakingChangeLoading] = useState(false);
+  const [prPredictLoading, setPrPredictLoading] = useState(false);
+  const [aibomLoading, setAibomLoading] = useState(false);
+  const [supplyChainLoading, setSupplyChainLoading] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -1182,6 +1199,128 @@ const App: React.FC = () => {
       throw err;
     } finally {
       setAgenticScanLoading(false);
+    }
+  }, [analysis, repo, structure, deepAudit, addLog]);
+
+  // Wave 19: Dependency Intelligence handler
+  const handleAnalyzeDependencyIntelligence = useCallback(async (): Promise<DependencyReport> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setDepIntelLoading(true);
+    try {
+      const allPaths = structure.flatMap(function flatPaths(n: FileNode): string[] {
+        return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+      });
+      const result = await analyzeDependencyIntelligence({
+        fileTree: allPaths,
+        techStack: analysis.techStack,
+        repoName: `${repo.owner}/${repo.repo}`,
+      });
+      addLog(`Dependency scan: ${result.criticalCount} critical, ${result.outdatedCount} outdated`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Dependency scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setDepIntelLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 19: Breaking Change Detector handler
+  const handleDetectBreakingChanges = useCallback(async (baseBranch: string, headBranch: string): Promise<BreakingChangeReport> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setBreakingChangeLoading(true);
+    try {
+      const allPaths = structure.flatMap(function flatPaths(n: FileNode): string[] {
+        return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+      });
+      const result = await detectBreakingChanges({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        fileTree: allPaths,
+        baseBranch,
+        headBranch,
+        summary: analysis.summary,
+      });
+      addLog(`Breaking change detection: ${result.totalBreaking} breaking, ${result.totalWarnings} warnings`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Breaking change detection failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setBreakingChangeLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 19: PR Merge Predictor handler
+  const handlePredictPRMerge = useCallback(async (prIdentifier: string): Promise<PRMergePrediction> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setPrPredictLoading(true);
+    try {
+      const result = await predictPRMerge({
+        repoName: `${repo.owner}/${repo.repo}`,
+        prIdentifier,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+        recentActivity: onboardingGuide?.recentActivity
+          ? { totalCommits: onboardingGuide.recentActivity.totalCommits, activeDevs: onboardingGuide.recentActivity.activeDevs }
+          : undefined,
+      });
+      addLog(`PR merge prediction: ${result.mergeConfidence}% confidence`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`PR prediction failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setPrPredictLoading(false);
+    }
+  }, [analysis, repo, onboardingGuide, addLog]);
+
+  // Wave 19: AIBOM Generator handler
+  const handleGenerateAIBOM = useCallback(async (): Promise<AIBOMReport> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setAibomLoading(true);
+    try {
+      const allPaths = structure.flatMap(function flatPaths(n: FileNode): string[] {
+        return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+      });
+      const result = await generateAIBOM({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        fileTree: allPaths,
+        summary: analysis.summary,
+      });
+      addLog(`AIBOM generated: trust score ${result.trustScore}/100`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`AIBOM generation failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setAibomLoading(false);
+    }
+  }, [analysis, repo, structure, addLog]);
+
+  // Wave 19: Supply Chain Scanner handler
+  const handleScanSupplyChain = useCallback(async (): Promise<SupplyChainScanResult> => {
+    if (!analysis || !repo) throw new Error('No analysis available');
+    setSupplyChainLoading(true);
+    try {
+      const allPaths = structure.flatMap(function flatPaths(n: FileNode): string[] {
+        return n.type === 'blob' ? [n.path] : (n.children || []).flatMap(flatPaths);
+      });
+      const result = await scanSupplyChain({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        fileTree: allPaths,
+        summary: analysis.summary,
+        securityInsights: deepAudit?.vulnerabilities,
+      });
+      addLog(`Supply chain scan: ${result.findings.length} ASI04 findings`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Supply chain scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setSupplyChainLoading(false);
     }
   }, [analysis, repo, structure, deepAudit, addLog]);
 
@@ -4217,6 +4356,13 @@ ${errorMessage}`);
                        </div>
                      </>
                    )}
+
+                   {/* Wave 19: PR Merge Predictor */}
+                   <PRMergePredictor
+                     onPredict={handlePredictPRMerge}
+                     loading={prPredictLoading}
+                     repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                   />
                  </div>
                )}
 
@@ -4480,6 +4626,32 @@ ${errorMessage}`);
                       <TestCoverageCard
                         onEstimate={handleEstimateTestCoverage}
                         loading={testCoverageLoading}
+                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                      />
+                    </div>
+
+                    {/* Wave 19: Supply Chain Deep Scan (ASI04) */}
+                    <div className="mt-8">
+                      <SupplyChainScanner
+                        onScan={handleScanSupplyChain}
+                        loading={supplyChainLoading}
+                      />
+                    </div>
+
+                    {/* Wave 19: Dependency Intelligence Panel */}
+                    <div className="mt-8">
+                      <DependencyIntelligence
+                        onAnalyze={handleAnalyzeDependencyIntelligence}
+                        loading={depIntelLoading}
+                        repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                      />
+                    </div>
+
+                    {/* Wave 19: AI Bill of Materials Generator */}
+                    <div className="mt-8">
+                      <AIBOMGenerator
+                        onGenerate={handleGenerateAIBOM}
+                        loading={aibomLoading}
                         repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
                       />
                     </div>
@@ -4855,6 +5027,14 @@ ${errorMessage}`);
                      onGenerate={handleGenerateChangelog}
                      repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
                      recentCommits={[]}
+                   />
+
+                   {/* ── Wave 19: Breaking Change Detector ── */}
+                   <BreakingChangeDetector
+                     onDetect={handleDetectBreakingChanges}
+                     loading={breakingChangeLoading}
+                     repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                     defaultBranch={repo?.defaultBranch || 'main'}
                    />
                  </div>
                )}

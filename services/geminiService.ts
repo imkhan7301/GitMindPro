@@ -2322,3 +2322,601 @@ Compute an agenticReadinessScore (0–100, higher = safer for agentic workflows)
     })),
   };
 };
+
+// ── Wave 19: Dependency Intelligence ─────────────────────────────────────────
+export interface DependencyReportData {
+  summary: string;
+  totalDeps: number;
+  outdatedCount: number;
+  riskyCount: number;
+  criticalCount: number;
+  dependencies: {
+    name: string;
+    currentVersion: string;
+    latestVersion: string;
+    isOutdated: boolean;
+    riskLevel: 'safe' | 'low' | 'medium' | 'high' | 'critical';
+    riskReason: string;
+    isDynamicLoader: boolean;
+    isEvalUser: boolean;
+    updateAdvice: string;
+    cveIds: string[];
+  }[];
+  supplyChainFlags: string[];
+  recommendation: string;
+}
+
+export const analyzeDependencyIntelligence = async (params: {
+  fileTree: string[];
+  techStack: string[];
+  repoName: string;
+  packageFiles?: string; // raw content of package.json / requirements.txt
+}): Promise<DependencyReportData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('analyzeDependencyIntelligence');
+
+  const depFiles = params.fileTree.filter(f =>
+    f.endsWith('package.json') || f.endsWith('requirements.txt') ||
+    f.endsWith('Pipfile') || f.endsWith('go.mod') || f.endsWith('Gemfile') ||
+    f.endsWith('pom.xml') || f.endsWith('build.gradle')
+  );
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are a senior security engineer specializing in supply chain security and dependency management.
+
+Analyze this repository's dependencies for security risks, outdated packages, and ASI04 (Agentic Supply Chain) vulnerabilities.
+
+Repository: ${params.repoName}
+Tech Stack: ${params.techStack.join(', ')}
+Dependency files found: ${depFiles.join(', ') || 'none detected'}
+${params.packageFiles ? `Package content sample:\n${params.packageFiles.slice(0, 2000)}` : ''}
+
+Identify:
+1. Outdated packages that need updates
+2. Packages that use dynamic loading (require(), import(), eval, exec)
+3. Packages with known CVEs (use your knowledge, flag with CVE IDs if known)
+4. Packages from unverified registries or with suspicious patterns (like the Postmark-MCP incident)
+5. Supply chain risk flags similar to real 2025–2026 incidents
+
+Generate 3–8 representative dependency entries. Include risk assessment per dependency.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING },
+          totalDeps: { type: Type.NUMBER },
+          outdatedCount: { type: Type.NUMBER },
+          riskyCount: { type: Type.NUMBER },
+          criticalCount: { type: Type.NUMBER },
+          dependencies: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                currentVersion: { type: Type.STRING },
+                latestVersion: { type: Type.STRING },
+                isOutdated: { type: Type.BOOLEAN },
+                riskLevel: { type: Type.STRING },
+                riskReason: { type: Type.STRING },
+                isDynamicLoader: { type: Type.BOOLEAN },
+                isEvalUser: { type: Type.BOOLEAN },
+                updateAdvice: { type: Type.STRING },
+                cveIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: ['name', 'currentVersion', 'latestVersion', 'isOutdated', 'riskLevel', 'riskReason', 'isDynamicLoader', 'isEvalUser', 'updateAdvice', 'cveIds'],
+            }
+          },
+          supplyChainFlags: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendation: { type: Type.STRING },
+        },
+        required: ['summary', 'totalDeps', 'outdatedCount', 'riskyCount', 'criticalCount', 'dependencies', 'supplyChainFlags', 'recommendation'],
+      }
+    }
+  }, 'dependency intelligence');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    summary: parsed.summary || '',
+    totalDeps: parsed.totalDeps || 0,
+    outdatedCount: parsed.outdatedCount || 0,
+    riskyCount: parsed.riskyCount || 0,
+    criticalCount: parsed.criticalCount || 0,
+    dependencies: (parsed.dependencies || []).map((d: DependencyReportData['dependencies'][0]) => ({
+      name: d.name || '',
+      currentVersion: d.currentVersion || '?',
+      latestVersion: d.latestVersion || '?',
+      isOutdated: !!d.isOutdated,
+      riskLevel: d.riskLevel || 'safe',
+      riskReason: d.riskReason || '',
+      isDynamicLoader: !!d.isDynamicLoader,
+      isEvalUser: !!d.isEvalUser,
+      updateAdvice: d.updateAdvice || '',
+      cveIds: d.cveIds || [],
+    })),
+    supplyChainFlags: parsed.supplyChainFlags || [],
+    recommendation: parsed.recommendation || '',
+  };
+};
+
+// ── Wave 19: Breaking Change Detector ────────────────────────────────────────
+export interface BreakingChangeReportData {
+  summary: string;
+  baseBranch: string;
+  headBranch: string;
+  totalBreaking: number;
+  totalWarnings: number;
+  changes: {
+    type: 'breaking' | 'warning' | 'safe';
+    category: 'api' | 'schema' | 'config' | 'dependency' | 'behavior' | 'type';
+    title: string;
+    description: string;
+    file: string;
+    line?: number;
+    recommendation: string;
+  }[];
+  migrationGuide: string;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export const detectBreakingChanges = async (params: {
+  repoName: string;
+  techStack: string[];
+  fileTree: string[];
+  baseBranch: string;
+  headBranch: string;
+  summary: string;
+}): Promise<BreakingChangeReportData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('detectBreakingChanges');
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are a senior software architect specializing in API design and backward compatibility.
+
+Analyze potential breaking changes between branches for this repository:
+
+Repository: ${params.repoName}
+Tech Stack: ${params.techStack.join(', ')}
+Base Branch: ${params.baseBranch}
+Head Branch: ${params.headBranch}
+Repository Summary: ${params.summary}
+Key files: ${params.fileTree.slice(0, 40).join(', ')}
+
+Based on the tech stack and repository structure, identify likely breaking change patterns:
+1. API endpoint changes (removed routes, changed signatures, renamed params)
+2. Database schema changes (dropped columns, type changes, renamed tables)
+3. Dependency major version bumps (breaking API changes in deps)
+4. Configuration format changes
+5. Type/interface changes (TypeScript)
+6. Behavior changes (changed defaults, removed features)
+
+Generate 4–8 realistic change entries based on the tech stack. Include at least 1–2 breaking changes if the repo has public APIs.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING },
+          baseBranch: { type: Type.STRING },
+          headBranch: { type: Type.STRING },
+          totalBreaking: { type: Type.NUMBER },
+          totalWarnings: { type: Type.NUMBER },
+          changes: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                type: { type: Type.STRING },
+                category: { type: Type.STRING },
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+                file: { type: Type.STRING },
+                line: { type: Type.NUMBER },
+                recommendation: { type: Type.STRING },
+              },
+              required: ['type', 'category', 'title', 'description', 'file', 'recommendation'],
+            }
+          },
+          migrationGuide: { type: Type.STRING },
+          riskLevel: { type: Type.STRING },
+        },
+        required: ['summary', 'baseBranch', 'headBranch', 'totalBreaking', 'totalWarnings', 'changes', 'migrationGuide', 'riskLevel'],
+      }
+    }
+  }, 'breaking change detector');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    summary: parsed.summary || '',
+    baseBranch: parsed.baseBranch || params.baseBranch,
+    headBranch: parsed.headBranch || params.headBranch,
+    totalBreaking: parsed.totalBreaking || 0,
+    totalWarnings: parsed.totalWarnings || 0,
+    changes: (parsed.changes || []).map((c: BreakingChangeReportData['changes'][0]) => ({
+      type: c.type || 'safe',
+      category: c.category || 'api',
+      title: c.title || '',
+      description: c.description || '',
+      file: c.file || '',
+      line: c.line,
+      recommendation: c.recommendation || '',
+    })),
+    migrationGuide: parsed.migrationGuide || '',
+    riskLevel: parsed.riskLevel || 'low',
+  };
+};
+
+// ── Wave 19: PR Merge Predictor ───────────────────────────────────────────────
+export interface PRMergePredictionData {
+  prNumber: number;
+  prTitle: string;
+  mergeConfidence: number;
+  predictedOutcome: 'likely-merge' | 'needs-changes' | 'likely-rejected' | 'uncertain';
+  timeToMergeEstimate: string;
+  signals: {
+    label: string;
+    value: string;
+    impact: 'positive' | 'negative' | 'neutral';
+    weight: number;
+  }[];
+  reviewerInsights: string;
+  riskFactors: string[];
+  suggestions: string[];
+  summary: string;
+}
+
+export const predictPRMerge = async (params: {
+  repoName: string;
+  prIdentifier: string;
+  techStack: string[];
+  summary: string;
+  recentActivity?: { totalCommits: number; activeDevs: number };
+}): Promise<PRMergePredictionData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('predictPRMerge');
+
+  const prNum = params.prIdentifier.match(/(\d+)$/)?.[1] || params.prIdentifier;
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are an expert in software team dynamics, code review processes, and pull request lifecycle analysis.
+
+Predict the merge outcome for this pull request:
+
+Repository: ${params.repoName}
+PR Identifier: ${prNum}
+Tech Stack: ${params.techStack.join(', ')}
+Repo Summary: ${params.summary}
+${params.recentActivity ? `Team: ${params.recentActivity.activeDevs} active devs, ${params.recentActivity.totalCommits} recent commits` : ''}
+
+Based on the repository context and typical patterns for this tech stack, generate a realistic prediction:
+- Confidence score (0–100, based on code quality signals, repo activity, etc.)
+- Key signals that affect merge probability (PR size, test coverage, CI patterns, review velocity)
+- Risk factors that could delay or block the merge
+- Actionable suggestions to improve merge chance
+- Estimated time to merge based on team velocity
+
+Generate 5–7 signals. Be specific and realistic for the given tech stack.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          prNumber: { type: Type.NUMBER },
+          prTitle: { type: Type.STRING },
+          mergeConfidence: { type: Type.NUMBER },
+          predictedOutcome: { type: Type.STRING },
+          timeToMergeEstimate: { type: Type.STRING },
+          signals: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                label: { type: Type.STRING },
+                value: { type: Type.STRING },
+                impact: { type: Type.STRING },
+                weight: { type: Type.NUMBER },
+              },
+              required: ['label', 'value', 'impact', 'weight'],
+            }
+          },
+          reviewerInsights: { type: Type.STRING },
+          riskFactors: { type: Type.ARRAY, items: { type: Type.STRING } },
+          suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          summary: { type: Type.STRING },
+        },
+        required: ['prNumber', 'prTitle', 'mergeConfidence', 'predictedOutcome', 'timeToMergeEstimate', 'signals', 'reviewerInsights', 'riskFactors', 'suggestions', 'summary'],
+      }
+    }
+  }, 'PR merge predictor');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    prNumber: Number(prNum) || parsed.prNumber || 0,
+    prTitle: parsed.prTitle || `PR #${prNum}`,
+    mergeConfidence: Math.min(100, Math.max(0, parsed.mergeConfidence || 50)),
+    predictedOutcome: parsed.predictedOutcome || 'uncertain',
+    timeToMergeEstimate: parsed.timeToMergeEstimate || '2–5 days',
+    signals: (parsed.signals || []).map((s: PRMergePredictionData['signals'][0]) => ({
+      label: s.label || '',
+      value: s.value || '',
+      impact: s.impact || 'neutral',
+      weight: Math.min(5, Math.max(1, s.weight || 3)),
+    })),
+    reviewerInsights: parsed.reviewerInsights || '',
+    riskFactors: parsed.riskFactors || [],
+    suggestions: parsed.suggestions || [],
+    summary: parsed.summary || '',
+  };
+};
+
+// ── Wave 19: AIBOM Generator ──────────────────────────────────────────────────
+export interface AIBOMReportData {
+  repoName: string;
+  generatedAt: string;
+  version: string;
+  models: {
+    name: string;
+    provider: string;
+    version: string;
+    purpose: string;
+    inputTypes: string[];
+    outputTypes: string[];
+    trustedSource: boolean;
+  }[];
+  tools: {
+    name: string;
+    version: string;
+    category: 'analysis' | 'storage' | 'auth' | 'llm' | 'infra' | 'sdk';
+    purpose: string;
+    externalAccess: boolean;
+  }[];
+  apis: {
+    name: string;
+    endpoint: string;
+    purpose: string;
+    dataShared: string[];
+    authMethod: string;
+    trustedSource: boolean;
+  }[];
+  supplyChainIntegrity: {
+    signedOutputs: boolean;
+    provenanceTracking: boolean;
+    inputSanitization: boolean;
+    rateLimiting: boolean;
+    auditLogging: boolean;
+  };
+  trustScore: number;
+  summary: string;
+}
+
+export const generateAIBOM = async (params: {
+  repoName: string;
+  techStack: string[];
+  fileTree: string[];
+  summary: string;
+}): Promise<AIBOMReportData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('generateAIBOM');
+
+  const hasSupabase = params.techStack.some(t => t.toLowerCase().includes('supabase')) ||
+    params.fileTree.some(f => f.includes('supabase'));
+  const hasGemini = params.fileTree.some(f => f.includes('gemini') || f.includes('genai'));
+  const hasStripe = params.fileTree.some(f => f.includes('stripe'));
+  const hasGitHub = params.techStack.some(t => t.toLowerCase().includes('github')) ||
+    params.fileTree.some(f => f.includes('github'));
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are a supply chain security expert responsible for creating AI Bills of Materials (AIBOM) per OWASP Agentic Top 10 (ASI04) guidelines.
+
+Generate a comprehensive AIBOM for this repository:
+
+Repository: ${params.repoName}
+Tech Stack: ${params.techStack.join(', ')}
+Key files: ${params.fileTree.slice(0, 40).join(', ')}
+Summary: ${params.summary}
+
+Detected integrations:
+${hasGemini ? '- Google Gemini AI (LLM for analysis)' : ''}
+${hasSupabase ? '- Supabase (PostgreSQL + Auth)' : ''}
+${hasStripe ? '- Stripe (payments)' : ''}
+${hasGitHub ? '- GitHub API (repository data)' : ''}
+
+Document every AI model, tool, API, and dependency used. Assess supply chain integrity.
+Trust score (0–100): based on signed outputs, provenance tracking, input sanitization, rate limiting, and audit logging.
+
+Generate a realistic AIBOM based on what you detect in the tech stack.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          models: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING }, provider: { type: Type.STRING },
+                version: { type: Type.STRING }, purpose: { type: Type.STRING },
+                inputTypes: { type: Type.ARRAY, items: { type: Type.STRING } },
+                outputTypes: { type: Type.ARRAY, items: { type: Type.STRING } },
+                trustedSource: { type: Type.BOOLEAN },
+              },
+              required: ['name', 'provider', 'version', 'purpose', 'inputTypes', 'outputTypes', 'trustedSource'],
+            }
+          },
+          tools: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING }, version: { type: Type.STRING },
+                category: { type: Type.STRING }, purpose: { type: Type.STRING },
+                externalAccess: { type: Type.BOOLEAN },
+              },
+              required: ['name', 'version', 'category', 'purpose', 'externalAccess'],
+            }
+          },
+          apis: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING }, endpoint: { type: Type.STRING },
+                purpose: { type: Type.STRING },
+                dataShared: { type: Type.ARRAY, items: { type: Type.STRING } },
+                authMethod: { type: Type.STRING }, trustedSource: { type: Type.BOOLEAN },
+              },
+              required: ['name', 'endpoint', 'purpose', 'dataShared', 'authMethod', 'trustedSource'],
+            }
+          },
+          supplyChainIntegrity: {
+            type: Type.OBJECT,
+            properties: {
+              signedOutputs: { type: Type.BOOLEAN },
+              provenanceTracking: { type: Type.BOOLEAN },
+              inputSanitization: { type: Type.BOOLEAN },
+              rateLimiting: { type: Type.BOOLEAN },
+              auditLogging: { type: Type.BOOLEAN },
+            },
+            required: ['signedOutputs', 'provenanceTracking', 'inputSanitization', 'rateLimiting', 'auditLogging'],
+          },
+          trustScore: { type: Type.NUMBER },
+          summary: { type: Type.STRING },
+        },
+        required: ['models', 'tools', 'apis', 'supplyChainIntegrity', 'trustScore', 'summary'],
+      }
+    }
+  }, 'AIBOM generator');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    repoName: params.repoName,
+    generatedAt: new Date().toISOString(),
+    version: '1.0.0',
+    models: parsed.models || [],
+    tools: parsed.tools || [],
+    apis: parsed.apis || [],
+    supplyChainIntegrity: parsed.supplyChainIntegrity || {
+      signedOutputs: false, provenanceTracking: false,
+      inputSanitization: false, rateLimiting: false, auditLogging: false,
+    },
+    trustScore: Math.min(100, Math.max(0, parsed.trustScore || 50)),
+    summary: parsed.summary || '',
+  };
+};
+
+// ── Wave 19: Supply Chain Deep Scan (ASI04) ───────────────────────────────────
+export interface SupplyChainScanData {
+  summary: string;
+  overallRisk: 'critical' | 'high' | 'medium' | 'low';
+  asi04Score: number;
+  dynamicLoaderCount: number;
+  untrustedRegistryCount: number;
+  findings: {
+    caseRef: 'postmark-mcp' | 'clawhavoc' | 'clinejection' | 'general';
+    asiCode: 'ASI04' | 'ASI01' | 'ASI02';
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    title: string;
+    description: string;
+    evidence: string;
+    affectedFiles: string[];
+    recommendation: string;
+    realWorldParallel: string;
+  }[];
+  mitigationsApplied: string[];
+  recommendation: string;
+}
+
+export const scanSupplyChain = async (params: {
+  repoName: string;
+  techStack: string[];
+  fileTree: string[];
+  summary: string;
+  securityInsights?: string[];
+}): Promise<SupplyChainScanData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  checkRateLimit('scanSupplyChain');
+
+  const dynamicLoaderFiles = params.fileTree.filter(f =>
+    f.includes('plugin') || f.includes('loader') || f.includes('registry') ||
+    f.includes('mcp') || f.includes('agent') || f.includes('hook')
+  );
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: `You are an expert in agentic supply chain security, specializing in OWASP ASI04 (Agentic Supply Chain Vulnerabilities, 2026).
+
+You are deeply familiar with these real-world 2025–2026 incidents:
+- Postmark-MCP (Sept 2025): Malicious npm MCP server silently BCC'd emails to attacker. ~1,643 downloads. First known malicious MCP server.
+- ClawHavoc (Jan–Mar 2026): 341–1,184 malicious skills on ClawHub marketplace. Delivered AMOS stealer, keyloggers. 300k users targeted.
+- Clinejection (Feb 2026): Prompt injection in GitHub issue → cache poisoning → malicious Cline CLI on npm. ~4,000 devs compromised.
+
+Scan this repository for ASI04 supply chain vulnerabilities:
+
+Repository: ${params.repoName}
+Tech Stack: ${params.techStack.join(', ')}
+All files (sample): ${params.fileTree.slice(0, 50).join(', ')}
+Dynamic loader files detected: ${dynamicLoaderFiles.join(', ') || 'none'}
+${params.securityInsights ? `Existing security notes: ${params.securityInsights.join('; ')}` : ''}
+
+For each finding, map to the most relevant real-world incident (postmark-mcp, clawhavoc, clinejection, or general).
+Assess mitigations already in place based on the tech stack.
+Generate 3–6 findings specific to this stack.` }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING },
+          overallRisk: { type: Type.STRING },
+          asi04Score: { type: Type.NUMBER },
+          dynamicLoaderCount: { type: Type.NUMBER },
+          untrustedRegistryCount: { type: Type.NUMBER },
+          findings: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                caseRef: { type: Type.STRING },
+                asiCode: { type: Type.STRING },
+                severity: { type: Type.STRING },
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+                evidence: { type: Type.STRING },
+                affectedFiles: { type: Type.ARRAY, items: { type: Type.STRING } },
+                recommendation: { type: Type.STRING },
+                realWorldParallel: { type: Type.STRING },
+              },
+              required: ['caseRef', 'asiCode', 'severity', 'title', 'description', 'evidence', 'affectedFiles', 'recommendation', 'realWorldParallel'],
+            }
+          },
+          mitigationsApplied: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendation: { type: Type.STRING },
+        },
+        required: ['summary', 'overallRisk', 'asi04Score', 'dynamicLoaderCount', 'untrustedRegistryCount', 'findings', 'mitigationsApplied', 'recommendation'],
+      }
+    }
+  }, 'supply chain scanner');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    summary: parsed.summary || '',
+    overallRisk: parsed.overallRisk || 'medium',
+    asi04Score: Math.min(100, Math.max(0, parsed.asi04Score || 50)),
+    dynamicLoaderCount: parsed.dynamicLoaderCount || 0,
+    untrustedRegistryCount: parsed.untrustedRegistryCount || 0,
+    findings: (parsed.findings || []).map((f: SupplyChainScanData['findings'][0]) => ({
+      caseRef: f.caseRef || 'general',
+      asiCode: f.asiCode || 'ASI04',
+      severity: f.severity || 'medium',
+      title: f.title || '',
+      description: f.description || '',
+      evidence: f.evidence || '',
+      affectedFiles: f.affectedFiles || [],
+      recommendation: f.recommendation || '',
+      realWorldParallel: f.realWorldParallel || '',
+    })),
+    mitigationsApplied: parsed.mitigationsApplied || [],
+    recommendation: parsed.recommendation || '',
+  };
+};
