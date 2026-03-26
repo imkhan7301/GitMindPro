@@ -1863,3 +1863,140 @@ Also provide a short 1-sentence description of what the diagram shows, and the c
     componentCount: parsed.componentCount || 0,
   };
 };
+
+// ────── Wave 17: AI Commit Message Generator ──────
+
+export interface GeneratedCommitData {
+  type: string;
+  scope: string;
+  subject: string;
+  body: string;
+  breaking: string;
+  fullMessage: string;
+}
+
+export const generateCommitMessage = async (input: string): Promise<GeneratedCommitData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const prompt = `You are an expert at writing conventional commit messages. Analyze the following git diff or change description and generate a perfect conventional commit message.
+
+Input:
+${input.slice(0, 3000)}
+
+Generate a commit message following the Conventional Commits spec (https://conventionalcommits.org):
+- type: one of feat, fix, chore, refactor, docs, test, perf, ci, build, style, revert
+- scope: optional short noun describing section of codebase (e.g. auth, api, ui) — leave empty if not applicable
+- subject: short imperative description (max 72 chars, no period at end, lowercase)
+- body: longer explanation of WHAT and WHY (2-4 sentences, can be empty string)
+- breaking: if there's a breaking change, describe it here — otherwise empty string
+- fullMessage: the complete formatted commit message including subject + body + breaking change footer
+
+Make the message specific, meaningful, and professional. Lead with the impact, not the implementation.`;
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: prompt }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING },
+          scope: { type: Type.STRING },
+          subject: { type: Type.STRING },
+          body: { type: Type.STRING },
+          breaking: { type: Type.STRING },
+          fullMessage: { type: Type.STRING },
+        },
+        required: ['type', 'scope', 'subject', 'body', 'breaking', 'fullMessage'],
+      }
+    }
+  }, 'commit message generator');
+
+  const parsed = JSON.parse(response.text || '{}');
+  const type = parsed.type || 'chore';
+  const scope = parsed.scope || '';
+  const subject = parsed.subject || 'update codebase';
+  return {
+    type,
+    scope,
+    subject: `${type}${scope ? `(${scope})` : ''}: ${subject}`,
+    body: parsed.body || '',
+    breaking: parsed.breaking || '',
+    fullMessage: parsed.fullMessage || `${type}${scope ? `(${scope})` : ''}: ${subject}`,
+  };
+};
+
+// ────── Wave 17: Code Intelligence Extractor ──────
+
+export interface CodeExtractionData {
+  functionName: string;
+  plainEnglish: string;
+  businessLogic: string;
+  extractedCode: string;
+  dependencies: string[];
+  usedIn: string[];
+  isReusable: boolean;
+  refactoringTip: string;
+}
+
+export const extractCodeIntelligence = async (params: {
+  fileName: string;
+  fileContent: string;
+  query: string;
+}): Promise<CodeExtractionData> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const prompt = `You are a senior software engineer performing code intelligence extraction.
+
+File: ${params.fileName}
+Query: "${params.query}"
+
+Source Code:
+\`\`\`
+${params.fileContent.slice(0, 4000)}
+\`\`\`
+
+Based on the query, identify and extract the most relevant piece of code. Then provide:
+
+1. functionName: The name of the extracted function/class/module (or a descriptive label if it's a block)
+2. plainEnglish: Explain in plain English what this code does (2-3 sentences, for a non-technical reader)
+3. businessLogic: Describe the business rules and logic embedded in this code (bullet points, technical but clear)
+4. extractedCode: The exact code snippet extracted (clean, runnable, with minimal surrounding context)
+5. dependencies: List imports, modules, or external functions this code depends on
+6. usedIn: List of other files or modules where this function is likely called (based on naming conventions and context)
+7. isReusable: true if this code could be extracted to a utility/shared module, false if it's tightly coupled
+8. refactoringTip: One actionable tip to improve this code (or "Code looks good" if no improvements needed)`;
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: prompt }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          functionName: { type: Type.STRING },
+          plainEnglish: { type: Type.STRING },
+          businessLogic: { type: Type.STRING },
+          extractedCode: { type: Type.STRING },
+          dependencies: { type: Type.ARRAY, items: { type: Type.STRING } },
+          usedIn: { type: Type.ARRAY, items: { type: Type.STRING } },
+          isReusable: { type: Type.BOOLEAN },
+          refactoringTip: { type: Type.STRING },
+        },
+        required: ['functionName', 'plainEnglish', 'businessLogic', 'extractedCode', 'dependencies', 'usedIn', 'isReusable', 'refactoringTip'],
+      }
+    }
+  }, 'code intelligence extractor');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    functionName: parsed.functionName || params.query,
+    plainEnglish: parsed.plainEnglish || '',
+    businessLogic: parsed.businessLogic || '',
+    extractedCode: parsed.extractedCode || '',
+    dependencies: parsed.dependencies || [],
+    usedIn: parsed.usedIn || [],
+    isReusable: parsed.isReusable ?? false,
+    refactoringTip: parsed.refactoringTip || '',
+  };
+};

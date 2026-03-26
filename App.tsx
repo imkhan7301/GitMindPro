@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -56,9 +56,14 @@ import VibeModeSelector from './components/VibeModeSelector';
 import type { VibeMode } from './components/VibeModeSelector';
 import ArchitectureDiagram from './components/ArchitectureDiagram';
 import type { ArchitectureDiagramResult } from './components/ArchitectureDiagram';
+import CommitMessageGenerator from './components/CommitMessageGenerator';
+import type { GeneratedCommit } from './components/CommitMessageGenerator';
+import CodeExtractor from './components/CodeExtractor';
+import type { CodeExtraction } from './components/CodeExtractor';
+import PublicRepoGallery from './components/PublicRepoGallery';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -443,6 +448,9 @@ const App: React.FC = () => {
   // Wave 16: AI Architecture Diagram state
   const [archDiagram, setArchDiagram] = useState<ArchitectureDiagramResult | null>(null);
   const [archDiagramLoading, setArchDiagramLoading] = useState(false);
+
+  // Wave 17: Code Intelligence Extractor state
+  const [codeExtractionLoading, setCodeExtractionLoading] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -1049,6 +1057,35 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
     addLog('Agent-ready JSON exported', 'success');
   }, [repo, analysis, addLog]);
+
+  // Wave 17: Commit Message Generator handler
+  const handleGenerateCommitMessage = useCallback(async (input: string): Promise<GeneratedCommit> => {
+    try {
+      const result = await generateCommitMessage(input);
+      addLog('Commit message generated', 'success');
+      return result;
+    } catch (err) {
+      addLog(`Commit message failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    }
+  }, [addLog]);
+
+  // Wave 17: Code Intelligence Extractor handler
+  const handleExtractCodeIntelligence = useCallback(async (
+    fileName: string, fileContent: string, query: string
+  ): Promise<CodeExtraction> => {
+    setCodeExtractionLoading(true);
+    try {
+      const result = await extractCodeIntelligence({ fileName, fileContent, query });
+      addLog(`Code extracted: ${result.functionName}`, 'success');
+      return result;
+    } catch (err) {
+      addLog(`Code extraction failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setCodeExtractionLoading(false);
+    }
+  }, [addLog]);
 
   const handleGetFix = useCallback(async (findingKey: string, params: {
     file: string; title: string; rationale: string; recommendation: string;
@@ -3452,7 +3489,30 @@ ${errorMessage}`);
                     ) : analysis ? (
                       <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-                          <ScoreCard scores={analysis.scorecard} />
+                          <div className="flex flex-col gap-3">
+                            <ScoreCard scores={analysis.scorecard} />
+                            {/* Wave 17: AI Confidence Score */}
+                            {repo && (() => {
+                              const starScore = Math.min(20, Math.round(Math.log10((repo.stars || 0) + 1) * 10));
+                              const techScore = Math.min(15, (analysis.techStack?.length || 0) * 2);
+                              const scorecardAvg = (analysis.scorecard.maintenance + analysis.scorecard.documentation + analysis.scorecard.innovation + analysis.scorecard.security) / 4;
+                              const qualityScore = Math.round(scorecardAvg * 0.5);
+                              const topicsScore = (repo.topics?.length || 0) > 0 ? 5 : 0;
+                              const confidence = Math.min(97, 55 + starScore + techScore + qualityScore + topicsScore);
+                              return (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">AI Confidence</span>
+                                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span className="text-xs font-black text-emerald-400">{confidence}%</span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-600">
+                                    {repo.stars?.toLocaleString()} stars · {analysis.techStack?.length} tech detected · {repo.forks?.toLocaleString()} forks
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
                           <button
                             onClick={exportAnalysisPdf}
                             className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-bold rounded-xl transition-all"
@@ -3525,6 +3585,15 @@ ${errorMessage}`);
                               <pre className="p-6 bg-black/40 rounded-2xl overflow-x-auto text-[10px] text-indigo-300 border border-slate-800">
                                 <code>{fileContent}</code>
                               </pre>
+                              {/* Wave 17: Code Intelligence Extractor */}
+                              {selectedFile && fileContent && (
+                                <CodeExtractor
+                                  fileName={selectedFile.name}
+                                  fileContent={fileContent}
+                                  onExtract={handleExtractCodeIntelligence}
+                                  loading={codeExtractionLoading}
+                                />
+                              )}
                            </div>
                          )}
                       </div>
@@ -4643,6 +4712,20 @@ ${errorMessage}`);
                        />
                      )}
                    </div>
+
+                   {/* ── Wave 17: AI Commit Message Generator ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="mb-6">
+                       <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                         <GitCommit className="w-6 h-6 text-emerald-400" /> AI Commit Message Generator
+                       </h2>
+                       <p className="text-slate-400 text-sm">Paste a git diff or describe your changes — get a perfect conventional commit message.</p>
+                     </div>
+                     <CommitMessageGenerator
+                       onGenerate={handleGenerateCommitMessage}
+                       repoName={repo ? `${repo.owner}/${repo.repo}` : undefined}
+                     />
+                   </div>
                  </div>
                )}
 
@@ -5247,6 +5330,21 @@ ${errorMessage}`);
                 </button>
               </div>
             )}
+
+            {/* Wave 17: Public Repo Gallery */}
+            <div className="mb-10">
+              <PublicRepoGallery
+                onAnalyze={(repoUrl) => {
+                  setUrl(repoUrl);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  setTimeout(() => {
+                    const form = document.querySelector('form');
+                    if (form) form.requestSubmit();
+                  }, 150);
+                }}
+              />
+            </div>
+
             </>
             )}
           </div>
