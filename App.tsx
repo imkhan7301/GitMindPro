@@ -33,8 +33,12 @@ import GlobalSearch from './components/GlobalSearch';
 import TeamActivityFeed from './components/TeamActivityFeed';
 import ExportHistoryCSV from './components/ExportHistoryCSV';
 import RepoTags from './components/RepoTags';
+import PRDiffViewer from './components/PRDiffViewer';
+import ScheduledReports from './components/ScheduledReports';
+import CustomScoringWeights from './components/CustomScoringWeights';
+import type { ScoringWeights } from './components/CustomScoringWeights';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -187,7 +191,7 @@ const App: React.FC = () => {
   const [prReviewLoading, setPrReviewLoading] = useState(false);
   const [prReviewResult, setPrReviewResult] = useState<PRReviewResult | null>(null);
   const [prReviewMeta, setPrReviewMeta] = useState<{ number: number; title: string; fileCount: number } | null>(null);
-  const [prReviewFiles, setPrReviewFiles] = useState<{ filename: string; status: string; additions: number; deletions: number }[]>([]);
+  const [prReviewFiles, setPrReviewFiles] = useState<{ filename: string; status: string; additions: number; deletions: number; patch?: string }[]>([]);
   
   // Free tier state
   const [freeTierStatus, setFreeTierStatus] = useState(getFreeTierStatus());
@@ -333,6 +337,10 @@ const App: React.FC = () => {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showTeamActivity, setShowTeamActivity] = useState(false);
   const [showExportCSV, setShowExportCSV] = useState(false);
+  const [showDiffViewer, setShowDiffViewer] = useState(false);
+  const [showScheduledReports, setShowScheduledReports] = useState(false);
+  const [showScoringWeights, setShowScoringWeights] = useState(false);
+  const [, setScoringWeights] = useState<ScoringWeights | null>(null);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -1706,7 +1714,7 @@ ${errorMessage}`);
       );
 
       setPrReviewResult(review);
-      setPrReviewFiles(files.map(f => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions })));
+      setPrReviewFiles(files.map(f => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions, patch: f.patch })));
       setPrReviewMeta({
         number: prNumber,
         title: prTitle,
@@ -3082,7 +3090,14 @@ ${errorMessage}`);
 
                        {prReviewFiles.length > 0 && (
                          <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
-                           <h4 className="text-lg font-black text-white mb-6">Changed Files ({prReviewFiles.length})</h4>
+                           <div className="flex items-center justify-between mb-6">
+                             <h4 className="text-lg font-black text-white">Changed Files ({prReviewFiles.length})</h4>
+                             {prReviewFiles.some(f => f.patch) && (
+                               <button onClick={() => setShowDiffViewer(true)} className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-xl text-xs font-bold text-cyan-400 transition-all">
+                                 <Code className="w-3 h-3" /> View Diff
+                               </button>
+                             )}
+                           </div>
                            <div className="space-y-1 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                              {prReviewFiles.map((f) => (
                                <div key={f.filename} className="flex items-center justify-between px-4 py-2 rounded-xl hover:bg-slate-800/40 transition-colors group">
@@ -3677,6 +3692,12 @@ ${errorMessage}`);
                 <p className="text-slate-500 text-sm">Your AI-powered code intelligence hub</p>
               </div>
               <div className="flex items-center gap-3">
+                <button onClick={() => setShowScoringWeights(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all" title="Custom Scoring Weights">
+                  <Sliders className="w-3.5 h-3.5" /> Weights
+                </button>
+                <button onClick={() => setShowScheduledReports(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all" title="Scheduled Reports">
+                  <Calendar className="w-3.5 h-3.5" /> Reports
+                </button>
                 <button onClick={() => setShowTeamActivity(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all" title="Team Activity Feed">
                   <Users className="w-3.5 h-3.5" /> Team
                 </button>
@@ -4175,6 +4196,8 @@ ${errorMessage}`);
           { id: 'search', label: 'Search All Analyses', desc: 'Find past analyses and PR reviews', icon: Search, action: () => { setCmdPaletteOpen(false); setShowGlobalSearch(true); } },
           { id: 'export', label: 'Export History', desc: 'Download analyses & PR reviews as CSV', icon: Download, action: () => { setCmdPaletteOpen(false); setShowExportCSV(true); } },
           { id: 'team-feed', label: 'Team Activity', desc: 'See what your team is analyzing', icon: Users, action: () => { setCmdPaletteOpen(false); setShowTeamActivity(true); } },
+          { id: 'reports', label: 'Scheduled Reports', desc: 'Auto-email repo health summaries', icon: Calendar, action: () => { setCmdPaletteOpen(false); setShowScheduledReports(true); } },
+          { id: 'weights', label: 'Scoring Weights', desc: 'Customize category importance', icon: Sliders, action: () => { setCmdPaletteOpen(false); setShowScoringWeights(true); } },
           ...(analysisHistory.length >= 2 ? [{ id: 'diff', label: 'Analysis Diff', desc: 'Compare analyses over time', icon: BarChart3, action: () => { setCmdPaletteOpen(false); setShowAnalysisDiff(true); } }] : []),
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
           { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
@@ -4367,6 +4390,34 @@ ${errorMessage}`);
           analyses={analysisHistory}
           prReviews={prReviewHistory}
           onClose={() => setShowExportCSV(false)}
+        />
+      )}
+
+      {/* PR Diff Viewer */}
+      {showDiffViewer && prReviewMeta && (
+        <PRDiffViewer
+          files={prReviewFiles}
+          prNumber={prReviewMeta.number}
+          prTitle={prReviewMeta.title}
+          onClose={() => setShowDiffViewer(false)}
+        />
+      )}
+
+      {/* Scheduled Reports */}
+      {showScheduledReports && authUser && (
+        <ScheduledReports
+          userEmail={authUser.email || ''}
+          watchedRepos={[...watchedRepos]}
+          onClose={() => setShowScheduledReports(false)}
+        />
+      )}
+
+      {/* Custom Scoring Weights */}
+      {showScoringWeights && (
+        <CustomScoringWeights
+          currentScores={analysis?.scorecard || null}
+          onClose={() => setShowScoringWeights(false)}
+          onSave={(w) => setScoringWeights(w)}
         />
       )}
 
