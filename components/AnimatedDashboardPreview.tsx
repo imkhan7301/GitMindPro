@@ -47,7 +47,14 @@ export default function AnimatedDashboardPreview() {
   const [barsActive, setBarsActive] = useState(false);
   const [pillsVisible, setPillsVisible] = useState(false);
   const cycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const TARGET_TEXT = 'vercel/next.js';
+
+  const addTimer = (fn: () => void, ms: number) => {
+    const t = setTimeout(fn, ms);
+    allTimers.current.push(t);
+    return t;
+  };
 
   const runCycle = () => {
     // Stage 1 input — type the repo
@@ -61,26 +68,26 @@ export default function AnimatedDashboardPreview() {
       i++;
       setTyped(TARGET_TEXT.slice(0, i));
       if (i < TARGET_TEXT.length) {
-        setTimeout(typeNext, 55 + Math.random() * 40);
+        addTimer(typeNext, 55 + Math.random() * 40);
       } else {
         // Stage 2 loading
-        setTimeout(() => setStage('loading'), 350);
-        setTimeout(() => {
+        addTimer(() => setStage('loading'), 350);
+        addTimer(() => {
           // Stage 3 results
           setStage('results');
-          setTimeout(() => setBarsActive(true), 200);
-          setTimeout(() => setPillsVisible(true), 900);
+          addTimer(() => setBarsActive(true), 200);
+          addTimer(() => setPillsVisible(true), 900);
         }, 1800);
       }
     };
-    setTimeout(typeNext, 200);
+    addTimer(typeNext, 200);
 
-    cycleRef.current = setTimeout(runCycle, CYCLE_MS);
+    cycleRef.current = addTimer(runCycle, CYCLE_MS);
   };
 
   useEffect(() => {
     runCycle();
-    return () => { if (cycleRef.current) clearTimeout(cycleRef.current); };
+    return () => { allTimers.current.forEach(clearTimeout); allTimers.current = []; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

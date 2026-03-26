@@ -36,7 +36,7 @@ const ReadmeGenerator: React.FC<ReadmeGeneratorProps> = ({
       .replace(/^# (.+)$/gm, '<h1 style="color:#fff;font-size:22px;font-weight:900;margin:0 0 12px;">$1</h1>')
       .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#e2e8f0;">$1</strong>')
       .replace(/`([^`]+)`/g, '<code style="background:#1e293b;color:#818cf8;padding:2px 6px;border-radius:4px;font-size:12px;">$1</code>')
-      .replace(/^\- (.+)$/gm, '<li style="color:#94a3b8;margin:4px 0;padding-left:4px;">$1</li>')
+      .replace(/^- (.+)$/gm, '<li style="color:#94a3b8;margin:4px 0;padding-left:4px;">$1</li>')
       .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul style="padding-left:20px;margin:8px 0;">$&</ul>')
       .replace(/\n\n/g, '<br><br>')
       .replace(/\n/g, '<br>');

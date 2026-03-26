@@ -56,8 +56,9 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ onClose }) => {
               <Sparkles className="w-4 h-4 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white">What's New</h2>
+              <h2 className="text-lg font-black text-white">What&apos;s New</h2>
               <p className="text-[10px] text-slate-500">Latest updates and improvements</p>
+          
             </div>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>

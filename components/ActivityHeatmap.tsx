@@ -40,7 +40,7 @@ const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ dates, weeks = 20 }) 
     const cols: { date: string; count: number; dayOfWeek: number }[][] = [];
     const labels: { text: string; col: number }[] = [];
     let lastMonth = -1;
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
 
     let col: { date: string; count: number; dayOfWeek: number }[] = [];
     let colIdx = 0;
@@ -69,14 +69,9 @@ const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ dates, weeks = 20 }) 
     // Calculate streak
     let streakCount = 0;
     const checkDate = new Date(today);
-    while (true) {
-      const key = checkDate.toISOString().slice(0, 10);
-      if (countMap[key]) {
-        streakCount++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else {
-        break;
-      }
+    while (countMap[checkDate.toISOString().slice(0, 10)]) {
+      streakCount++;
+      checkDate.setDate(checkDate.getDate() - 1);
     }
 
     return {

@@ -94,7 +94,7 @@ import ShareCard from './components/ShareCard';
 import AnimatedDashboardPreview from './components/AnimatedDashboardPreview';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -3493,8 +3493,8 @@ ${errorMessage}`);
                 <VibeModeSelector value={vibeMode} onChange={handleVibeChange} />
               )}
 
-               <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl">
-                  <div className="flex flex-wrap gap-2">
+               {/* ── Tab bar ─────────────────────────────────────── */}
+               <div className="flex flex-wrap gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl">
                     {[
                       { id: 'intelligence', label: 'Getting Started', icon: Rocket },
                       { id: 'blueprint', label: 'Architecture', icon: Layout },
@@ -3508,127 +3508,96 @@ ${errorMessage}`);
                         <tab.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">{tab.label}</span><span className="sm:hidden">{tab.label.split(' ')[0]}</span>
                       </button>
                     ))}
-                  </div>
-                  {analysis && (
-                    <div className="ml-auto flex items-center gap-2">
-                      {authUser && lastAnalysisId && (
-                        <button
-                          onClick={() => void handleShareAnalysis()}
-                          className={`px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 ${
-                            isShared
-                              ? 'bg-indigo-500 hover:bg-indigo-400 text-white'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                          }`}
-                        >
-                          <Share2 className="w-3.5 h-3.5" /> {isShared ? 'Shared' : 'Share'}
-                        </button>
-                      )}
-                      {analysis && repo && (
-                        <button
-                          onClick={() => setShowShareCard(true)}
-                          className="px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 bg-slate-800 hover:bg-violet-600 text-slate-300 hover:text-white border border-slate-700 hover:border-violet-500"
-                        >
-                          <Twitter className="w-3.5 h-3.5" /> Share Card
-                        </button>
-                      )}
-                      {authUser && repo && (
-                        <button
-                          onClick={async () => {
-                            const key = `${repo.owner}/${repo.repo}`;
-                            if (watchedRepos.has(key)) {
-                              await unwatchRepo(authUser.id, repo.owner, repo.repo).catch(() => {});
-                              setWatchedRepos(prev => { const next = new Set(prev); next.delete(key); return next; });
-                              addLog(`Unwatched ${key}`, 'info');
-                            } else {
-                              await watchRepo(authUser.id, repo.owner, repo.repo, activeWorkspaceId || null).catch(() => {});
-                              setWatchedRepos(prev => new Set(prev).add(key));
-                              addLog(`Watching ${key} — daily scheduled analysis enabled`, 'success');
-                              addNotification({ type: 'system', title: 'Repo Watched', message: `${key} will be analyzed daily. You'll get email digests weekly.` });
-                            }
-                          }}
-                          className={`px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 ${
-                            watchedRepos.has(`${repo.owner}/${repo.repo}`)
-                              ? 'bg-amber-500 hover:bg-amber-400 text-white'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                          }`}
-                        >
-                          <Clock className="w-3.5 h-3.5" /> {watchedRepos.has(`${repo.owner}/${repo.repo}`) ? 'Watching' : 'Watch'}
-                        </button>
-                      )}
-                      {repo && (
-                        <button
-                          onClick={() => setShowBadgeEmbed(true)}
-                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                        >
-                          <Link className="w-3.5 h-3.5" /> Badge
-                        </button>
-                      )}
-                      <button
-                        onClick={exportAnalysisMarkdown}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                      >
-                        <FileText className="w-3.5 h-3.5" /> Markdown
-                      </button>
-                      <button
-                        onClick={exportAnalysisJSON}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                        title="Export agent-ready JSON for Cursor / Claude Code / Devin"
-                      >
-                        <Cpu className="w-3.5 h-3.5" /> JSON
-                      </button>
-                      <button onClick={exportAnalysisPdf} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black rounded-xl transition-all text-xs">
-                        Export to PDF
-                      </button>
-                      <button
-                        onClick={() => { setShowExpertHire(true); }}
-                        className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                      >
-                        <Briefcase className="w-3.5 h-3.5" /> Hire Expert
-                      </button>
-                      {repo && analysis && (
-                        <>
-                          <button
-                            onClick={() => {
-                              const sc = analysis.scorecard;
-                              const avgScore = ((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4).toFixed(1);
-                              const ogUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(`${repo.owner}/${repo.repo}`)}&score=${avgScore}&stack=${encodeURIComponent(analysis.techStack.slice(0, 5).join(','))}&plan=${subscription.plan}`;
-                              const text = `Just analyzed ${repo.owner}/${repo.repo} with @GitMindPro — Score: ${avgScore}/10 🚀\n\nAI-powered code intelligence in seconds.`;
-                              window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(ogUrl)}`, '_blank', 'noopener');
-                            }}
-                            className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                            title="Share on X / Twitter"
-                          >
-                            <Twitter className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const sc = analysis.scorecard;
-                              const avgScore = ((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4).toFixed(1);
-                              const ogUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(`${repo.owner}/${repo.repo}`)}&score=${avgScore}&stack=${encodeURIComponent(analysis.techStack.slice(0, 5).join(','))}&plan=${subscription.plan}`;
-                              window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(ogUrl)}`, '_blank', 'noopener');
-                            }}
-                            className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                            title="Share on LinkedIn"
-                          >
-                            <Linkedin className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const sc = analysis.scorecard;
-                              const avgScore = ((sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4).toFixed(1);
-                              const ogUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(`${repo.owner}/${repo.repo}`)}&score=${avgScore}&stack=${encodeURIComponent(analysis.techStack.slice(0, 5).join(','))}&plan=${subscription.plan}`;
-                              void copyToClipboard(ogUrl, 'shareable OG link');
-                            }}
-                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
-                            title="Copy shareable card link"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
                </div>
+
+               {/* ── Action toolbar (separate row) ────────────────── */}
+               {analysis && (
+                 <div className="flex flex-wrap items-center gap-2">
+                   {/* Share group */}
+                   {authUser && lastAnalysisId && (
+                     <button
+                       onClick={() => void handleShareAnalysis()}
+                       className={`px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 ${
+                         isShared
+                           ? 'bg-indigo-500 hover:bg-indigo-400 text-white'
+                           : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                       }`}
+                     >
+                       <Share2 className="w-3.5 h-3.5" /> {isShared ? 'Shared' : 'Share'}
+                     </button>
+                   )}
+                   {repo && (
+                     <button
+                       onClick={() => setShowShareCard(true)}
+                       className="px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 bg-slate-800 hover:bg-violet-600 text-slate-300 hover:text-white border border-slate-700 hover:border-violet-500"
+                     >
+                       <Twitter className="w-3.5 h-3.5" /> Share Card
+                     </button>
+                   )}
+                   {authUser && repo && (
+                     <button
+                       onClick={async () => {
+                         const key = `${repo.owner}/${repo.repo}`;
+                         if (watchedRepos.has(key)) {
+                           await unwatchRepo(authUser.id, repo.owner, repo.repo).catch(() => {});
+                           setWatchedRepos(prev => { const next = new Set(prev); next.delete(key); return next; });
+                           addLog(`Unwatched ${key}`, 'info');
+                         } else {
+                           await watchRepo(authUser.id, repo.owner, repo.repo, activeWorkspaceId || null).catch(() => {});
+                           setWatchedRepos(prev => new Set(prev).add(key));
+                           addLog(`Watching ${key} — daily scheduled analysis enabled`, 'success');
+                           addNotification({ type: 'system', title: 'Repo Watched', message: `${key} will be analyzed daily. You'll get email digests weekly.` });
+                         }
+                       }}
+                       className={`px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 ${
+                         watchedRepos.has(`${repo.owner}/${repo.repo}`)
+                           ? 'bg-amber-500 hover:bg-amber-400 text-white'
+                           : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                       }`}
+                     >
+                       <Clock className="w-3.5 h-3.5" /> {watchedRepos.has(`${repo.owner}/${repo.repo}`) ? 'Watching' : 'Watch'}
+                     </button>
+                   )}
+
+                   <div className="w-px h-5 bg-slate-800 mx-1" />
+
+                   {/* Export group */}
+                   {repo && (
+                     <button
+                       onClick={() => setShowBadgeEmbed(true)}
+                       className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                     >
+                       <Link className="w-3.5 h-3.5" /> Badge
+                     </button>
+                   )}
+                   <button
+                     onClick={exportAnalysisMarkdown}
+                     className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                   >
+                     <FileText className="w-3.5 h-3.5" /> MD
+                   </button>
+                   <button
+                     onClick={exportAnalysisJSON}
+                     className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                     title="Export agent-ready JSON for Cursor / Claude Code / Devin"
+                   >
+                     <Cpu className="w-3.5 h-3.5" /> JSON
+                   </button>
+                   <button onClick={exportAnalysisPdf} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5">
+                     <Download className="w-3.5 h-3.5" /> PDF
+                   </button>
+
+                   <div className="w-px h-5 bg-slate-800 mx-1" />
+
+                   {/* CTA group */}
+                   <button
+                     onClick={() => { setShowExpertHire(true); }}
+                     className="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                   >
+                     <Briefcase className="w-3.5 h-3.5" /> Hire Expert
+                   </button>
+                 </div>
+               )}
 
                {activeTab === 'intelligence' && (
                  <div className="space-y-10 animate-in fade-in duration-700">

@@ -121,7 +121,7 @@ export default function OnboardingChecklist({ onGenerate, loading: externalLoadi
 
             {progress === 100 && (
               <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center">
-                <p className="text-emerald-400 font-black text-sm">🎉 All done! You're fully onboarded. Time to ship!</p>
+                <p className="text-emerald-400 font-black text-sm">🎉 All done! You&apos;re fully onboarded. Time to ship!</p>
               </div>
             )}
           </>

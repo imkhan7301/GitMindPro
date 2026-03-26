@@ -92,7 +92,7 @@ const PublicScorecardPage: React.FC<Props> = ({ shareToken }) => {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
         <div className="text-6xl font-black text-slate-800">404</div>
-        <p className="text-slate-500">This scorecard is private or doesn't exist.</p>
+        <p className="text-slate-500">This scorecard is private or doesn&apos;t exist.</p>
         <a href="/" className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors">← Go to GitMind Pro</a>
       </div>
     );

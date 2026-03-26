@@ -305,13 +305,13 @@ test.describe('full regression', () => {
 
   test('landing page loads', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Understand Any Codebase.' })).toBeVisible();
-    await expect(page.getByPlaceholder("Paste your company's GitHub repo URL...")).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Onboard to Any' })).toBeVisible();
+    await expect(page.getByPlaceholder('Paste GitHub repo URL...')).toBeVisible();
   });
 
   test('invalid URL logs error', async ({ page }) => {
     await page.goto('/');
-    const input = page.getByPlaceholder("Paste your company's GitHub repo URL...");
+    const input = page.getByPlaceholder('Paste GitHub repo URL...');
     await input.fill('not-a-url');
     await input.press('Enter');
 
@@ -322,7 +322,7 @@ test.describe('full regression', () => {
   test('analyze flow renders core tabs', async ({ page }) => {
     await page.goto('/');
 
-    const input = page.getByPlaceholder("Paste your company's GitHub repo URL...");
+    const input = page.getByPlaceholder('Paste GitHub repo URL...');
     await input.fill('https://github.com/octocat/Hello-World');
     await input.press('Enter');
 

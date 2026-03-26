@@ -133,7 +133,7 @@ export default function ArchitectureDiagram({ diagram, loading, onGenerate, repo
         {!loading && !diagram && (
           <div className="flex flex-col items-center justify-center h-48 gap-3 opacity-60">
             <GitBranch className="w-12 h-12 text-slate-700" />
-            <p className="text-sm font-bold text-slate-500">Click "Generate Diagram" to create an AI architecture map</p>
+            <p className="text-sm font-bold text-slate-500">Click &quot;Generate Diagram&quot; to create an AI architecture map</p>
             <p className="text-xs text-slate-600">Works best after running the full analysis</p>
           </div>
         )}

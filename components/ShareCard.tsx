@@ -65,7 +65,7 @@ export default function ShareCard({ repoOwner, repoName, scorecard, summary, tec
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
@@ -128,7 +128,7 @@ export default function ShareCard({ repoOwner, repoName, scorecard, summary, tec
           </div>
 
           {/* Summary snippet */}
-          <p className="text-slate-400 text-xs leading-relaxed mb-5 relative line-clamp-2">"{summary.slice(0, 140)}"</p>
+          <p className="text-slate-400 text-xs leading-relaxed mb-5 relative line-clamp-2">&quot;{summary.slice(0, 140)}&quot;</p>
 
           {/* Tech stack */}
           {techStack.length > 0 && (

@@ -82,7 +82,7 @@ const TeamActivityFeed: React.FC<Props> = ({ organizationId, onClose }) => {
             <div className="text-center py-16">
               <Users className="w-10 h-10 text-slate-700 mx-auto mb-3" />
               <p className="text-slate-500 text-sm font-bold">No activity yet</p>
-              <p className="text-slate-600 text-xs mt-1">Team members' analyses and PR reviews will appear here</p>
+              <p className="text-slate-600 text-xs mt-1">Team members&apos; analyses and PR reviews will appear here</p>
             </div>
           ) : (
             events.map(evt => (

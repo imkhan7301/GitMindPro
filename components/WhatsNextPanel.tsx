@@ -98,7 +98,7 @@ const WhatsNextPanel: React.FC<WhatsNextPanelProps> = ({
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-0.5">Analysis Complete</div>
-              <h3 className="text-sm font-black text-white">What's next?</h3>
+              <h3 className="text-sm font-black text-white">What&apos;s next?</h3>
             </div>
             <button
               onClick={handleClose}

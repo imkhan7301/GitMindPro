@@ -246,7 +246,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ authUser, theme, toggleTh
                   <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
                     <div className="flex items-start gap-2 mb-2">
                       <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-300 font-bold">Copy this key now — it won't be shown again.</p>
+                      <p className="text-xs text-amber-300 font-bold">Copy this key now — it won&apos;t be shown again.</p>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <code className="flex-1 bg-slate-900 text-emerald-400 text-xs font-mono px-3 py-2 rounded-lg overflow-x-auto">{newKeyResult}</code>

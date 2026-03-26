@@ -54,7 +54,7 @@ export default function MultiRepoHealthMatrix({ analyses, onDrillDown, onRefresh
     }
   }
 
-  let rows = [...repoBest.values()];
+  const rows = [...repoBest.values()];
 
   const getScore = (a: MatrixEntry) =>
     avg(a.scorecard?.maintenance, a.scorecard?.documentation, a.scorecard?.innovation, a.scorecard?.security);
