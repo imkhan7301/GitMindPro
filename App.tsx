@@ -28,8 +28,10 @@ import AnalysisDiff from './components/AnalysisDiff';
 import BadgeEmbed from './components/BadgeEmbed';
 import ChangelogModal, { CHANGELOG_VERSION } from './components/ChangelogModal';
 import WebhookFeed from './components/WebhookFeed';
+import ActivityHeatmap from './components/ActivityHeatmap';
+import GlobalSearch from './components/GlobalSearch';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -325,6 +327,7 @@ const App: React.FC = () => {
   const [showBadgeEmbed, setShowBadgeEmbed] = useState(false);
   const [showAnalysisDiff, setShowAnalysisDiff] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -3791,9 +3794,17 @@ ${errorMessage}`);
             </div>
 
             {/* Cmd+K hint */}
-            <div className="flex items-center justify-center gap-2 mb-10 text-slate-600 text-xs">
-              <kbd className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-md font-mono text-[10px]">⌘K</kbd>
-              <span>to open command palette</span>
+            <div className="flex items-center justify-center gap-4 mb-10 text-slate-600 text-xs">
+              <button
+                onClick={() => setShowGlobalSearch(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700 hover:border-indigo-500/40 rounded-xl text-xs text-slate-400 hover:text-white transition-all"
+              >
+                <Search className="w-3.5 h-3.5" /> Search all analyses...
+              </button>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-md font-mono text-[10px]">⌘K</kbd>
+                <span>command palette</span>
+              </div>
             </div>
 
             {/* Favorite Repos */}
@@ -3863,6 +3874,44 @@ ${errorMessage}`);
                 </button>
               </div>
             </div>
+
+            {/* Activity Heatmap */}
+            {(analysisHistory.length > 0 || prReviewHistory.length > 0) && (
+              <div className="mb-10">
+                <ActivityHeatmap
+                  dates={[
+                    ...analysisHistory.map(a => a.createdAt),
+                    ...prReviewHistory.map(p => p.createdAt),
+                  ]}
+                />
+              </div>
+            )}
+
+            {/* Quick Re-analyze */}
+            {analysisHistory.length > 0 && (
+              <div className="mb-10">
+                <h2 className="text-lg font-black text-white flex items-center gap-2 mb-4"><RotateCw className="w-4 h-4 text-emerald-400" /> Quick Re-analyze</h2>
+                <div className="flex flex-wrap gap-2">
+                  {[...new Map(analysisHistory.map(a => [`${a.repoOwner}/${a.repoName}`, a])).values()].slice(0, 8).map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => {
+                        setUrl(a.repoUrl);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        setTimeout(() => {
+                          const form = document.querySelector('form');
+                          if (form) form.requestSubmit();
+                        }, 150);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border border-slate-800 hover:border-emerald-500/40 rounded-xl text-xs font-bold text-slate-300 hover:text-emerald-300 transition-all group"
+                    >
+                      <RotateCw className="w-3 h-3 text-slate-600 group-hover:text-emerald-400 transition-colors" />
+                      {a.repoOwner}/{a.repoName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Score Trends */}
             {analysisHistory.length >= 2 && (
@@ -4111,6 +4160,7 @@ ${errorMessage}`);
           { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View all shortcuts', icon: Zap, action: () => { setCmdPaletteOpen(false); setShowShortcuts(true); } },
           { id: 'settings', label: 'Settings', desc: 'Theme, notifications, API keys', icon: Settings, action: () => { setCmdPaletteOpen(false); setShowSettings(true); } },
           { id: 'changelog', label: "What's New", desc: 'Latest features and updates', icon: Sparkles, action: () => { setCmdPaletteOpen(false); setShowChangelog(true); } },
+          { id: 'search', label: 'Search All Analyses', desc: 'Find past analyses and PR reviews', icon: Search, action: () => { setCmdPaletteOpen(false); setShowGlobalSearch(true); } },
           ...(analysisHistory.length >= 2 ? [{ id: 'diff', label: 'Analysis Diff', desc: 'Compare analyses over time', icon: BarChart3, action: () => { setCmdPaletteOpen(false); setShowAnalysisDiff(true); } }] : []),
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
           { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
@@ -4272,6 +4322,20 @@ ${errorMessage}`);
       {/* Changelog / What's New */}
       {showChangelog && (
         <ChangelogModal onClose={() => setShowChangelog(false)} />
+      )}
+
+      {/* Global Search */}
+      {showGlobalSearch && (
+        <GlobalSearch
+          analyses={analysisHistory}
+          prReviews={prReviewHistory}
+          onSelectAnalysis={async (repoUrl, analysisId) => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const ok = await handleRehydrate(analysisId);
+            if (!ok) setUrl(repoUrl);
+          }}
+          onClose={() => setShowGlobalSearch(false)}
+        />
       )}
 
       {/* Keyboard Shortcuts Overlay */}
