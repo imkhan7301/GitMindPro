@@ -121,6 +121,47 @@
       .react-flow__attribution {
         display: none !important;
       }
+
+      /* ─── Light Theme Overrides ─── */
+      .light-theme {
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --bg-nav: rgba(255,255,255,0.95);
+        --border-color: #e2e8f0;
+        --text-primary: #0f172a;
+        --text-secondary: #475569;
+        --text-muted: #94a3b8;
+      }
+      .light-theme body { background: #f8fafc; }
+      .light-theme .min-h-screen { background: #f8fafc !important; color: #334155 !important; }
+      .light-theme nav { background: rgba(255,255,255,0.95) !important; border-color: #e2e8f0 !important; }
+      .light-theme .bg-\[\\#020617\] { background: #f8fafc !important; }
+      .light-theme .bg-\[\\#020617\]\/95 { background: rgba(255,255,255,0.95) !important; }
+      .light-theme .bg-slate-900, .light-theme .bg-slate-900\/40, .light-theme .bg-slate-900\/50 {
+        background: #ffffff !important;
+      }
+      .light-theme .bg-slate-950 { background: #f1f5f9 !important; }
+      .light-theme .border-slate-800 { border-color: #e2e8f0 !important; }
+      .light-theme .border-slate-700 { border-color: #cbd5e1 !important; }
+      .light-theme .text-white { color: #0f172a !important; }
+      .light-theme .text-slate-300 { color: #475569 !important; }
+      .light-theme .text-slate-400 { color: #64748b !important; }
+      .light-theme .text-slate-500 { color: #94a3b8 !important; }
+      .light-theme .text-slate-600 { color: #94a3b8 !important; }
+      .light-theme .placeholder\:text-slate-600::placeholder { color: #94a3b8 !important; }
+      .light-theme .bg-slate-800 { background: #e2e8f0 !important; }
+      .light-theme .hover\:bg-slate-700:hover { background: #cbd5e1 !important; }
+      .light-theme .hover\:bg-slate-800\/50:hover { background: #e2e8f0 !important; }
+      .light-theme .shadow-2xl { box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important; }
+      .light-theme input, .light-theme select { background: #ffffff !important; border-color: #e2e8f0 !important; color: #0f172a !important; }
+      .light-theme ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+      .light-theme ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      .light-theme .react-flow__node {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #818cf8 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+      }
     </style>
     <script type="importmap">
     {

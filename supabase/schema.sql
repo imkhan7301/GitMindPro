@@ -570,3 +570,57 @@ create policy if not exists "user_preferences_upsert_own"
 create policy if not exists "user_preferences_update_own"
   on public.user_preferences for update
   using (auth.uid() = user_id);
+
+-- ============================================================
+-- API Keys (public REST API access)
+-- ============================================================
+
+create table if not exists public.api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  name text not null default 'Default',
+  key_hash text not null unique,
+  key_prefix text not null,
+  scopes text[] not null default '{analyze,read}',
+  last_used_at timestamptz,
+  expires_at timestamptz,
+  revoked boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_api_keys_user on public.api_keys(user_id);
+create index if not exists idx_api_keys_hash on public.api_keys(key_hash) where revoked = false;
+
+alter table public.api_keys enable row level security;
+
+create policy if not exists "api_keys_select_own"
+  on public.api_keys for select
+  using (auth.uid() = user_id);
+
+create policy if not exists "api_keys_insert_own"
+  on public.api_keys for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "api_keys_update_own"
+  on public.api_keys for update
+  using (auth.uid() = user_id);
+
+create policy if not exists "api_keys_delete_own"
+  on public.api_keys for delete
+  using (auth.uid() = user_id);
+
+-- API usage logs for rate limiting and analytics
+create table if not exists public.api_usage_logs (
+  id bigserial primary key,
+  api_key_id uuid not null references public.api_keys(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  endpoint text not null,
+  repo_owner text,
+  repo_name text,
+  status_code integer not null default 200,
+  response_time_ms integer,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_api_usage_key_created on public.api_usage_logs(api_key_id, created_at desc);
+create index if not exists idx_api_usage_user_created on public.api_usage_logs(user_id, created_at desc);

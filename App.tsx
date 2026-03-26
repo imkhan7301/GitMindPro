@@ -23,7 +23,8 @@ import NotificationCenter from './components/NotificationCenter';
 import type { AppNotification } from './components/NotificationCenter';
 import OnboardingWizard from './components/OnboardingWizard';
 import TrendChart from './components/TrendChart';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin } from 'lucide-react';
+import { useTheme } from './hooks/useTheme';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -136,6 +137,7 @@ const App: React.FC = () => {
   const fastModeFlag = (import.meta.env.VITE_FAST_MODE ?? '').toString().toLowerCase();
   const authEnabled = isAuthConfigured();
   const fastMode = fastModeFlag === 'true' || fastModeFlag === '1';
+  const { theme, toggleTheme } = useTheme();
   const maxTreeEntriesEnv = Number(import.meta.env.VITE_FAST_MODE_MAX_ENTRIES ?? 1500);
   const maxTreeEntries = Number.isFinite(maxTreeEntriesEnv) && maxTreeEntriesEnv > 0
     ? maxTreeEntriesEnv
@@ -313,6 +315,7 @@ const App: React.FC = () => {
   // Onboarding wizard state
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('gitmind.onboarded'));
   const [showExpertHire, setShowExpertHire] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -679,7 +682,7 @@ const App: React.FC = () => {
     };
   }, [authEnabled, addLog, loadUserWorkspaces]);
 
-  // Cmd+K command palette shortcut
+  // Cmd+K command palette shortcut + ? for shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -689,11 +692,21 @@ const App: React.FC = () => {
       }
       if (e.key === 'Escape') {
         setCmdPaletteOpen(false);
+        setShowShortcuts(false);
+      }
+      // ? key opens shortcuts (only when not typing in an input)
+      if (e.key === '?' && !cmdPaletteOpen && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLSelectElement)) {
+        setShowShortcuts(prev => !prev);
+      }
+      // / key focuses search bar
+      if (e.key === '/' && !cmdPaletteOpen && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLSelectElement)) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('input[placeholder]')?.focus();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [cmdPaletteOpen]);
 
   useEffect(() => {
     if (cmdPaletteOpen && cmdInputRef.current) {
@@ -2027,6 +2040,13 @@ ${errorMessage}`);
                     </div>
                   )}
                   <button
+                    onClick={toggleTheme}
+                    className="flex items-center gap-2 px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  >
+                    {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  </button>
+                  <button
                     onClick={handleSignOut}
                     disabled={authBusy}
                     className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
@@ -2042,6 +2062,14 @@ ${errorMessage}`);
                   />
                 </>
               ) : (
+                <>
+                <button
+                  onClick={toggleTheme}
+                  className="flex items-center gap-2 px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
                 <button
                   onClick={handleSignIn}
                   disabled={authBusy || authLoading}
@@ -2049,6 +2077,7 @@ ${errorMessage}`);
                 >
                   <LogIn className="w-4 h-4" /> {authLoading ? 'Checking session...' : 'Sign in'}
                 </button>
+                </>
               )}
             </div>
             {!authUser && !authLoading && (
@@ -4045,6 +4074,8 @@ ${errorMessage}`);
         const actions = [
           { id: 'new', label: 'New Analysis', desc: 'Paste a GitHub URL', icon: Plus, action: () => { setCmdPaletteOpen(false); document.querySelector('input')?.focus(); } },
           { id: 'demo', label: 'Try Demo — React', desc: 'Analyze facebook/react', icon: Rocket, action: () => { setCmdPaletteOpen(false); setUrl('https://github.com/facebook/react'); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100); } },
+          { id: 'theme', label: theme === 'dark' ? 'Light Mode' : 'Dark Mode', desc: 'Toggle theme', icon: theme === 'dark' ? Sun : Moon, action: () => { setCmdPaletteOpen(false); toggleTheme(); } },
+          { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View all shortcuts', icon: Zap, action: () => { setCmdPaletteOpen(false); setShowShortcuts(true); } },
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
           { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
           { id: 'marketplace', label: 'Expert Marketplace', desc: 'Hire developers or list your skills', icon: Briefcase, action: () => { setCmdPaletteOpen(false); setDashboardTab('marketplace'); } },
@@ -4173,6 +4204,33 @@ ${errorMessage}`);
             }
           }}
         />
+      )}
+
+      {/* Keyboard Shortcuts Overlay */}
+      {showShortcuts && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowShortcuts(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl animate-in zoom-in">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-black text-white flex items-center gap-2"><Zap className="w-5 h-5 text-amber-400" /> Keyboard Shortcuts</h2>
+              <button onClick={() => setShowShortcuts(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              {[
+                { keys: '⌘ K', desc: 'Open command palette' },
+                { keys: '?', desc: 'Show this overlay' },
+                { keys: 'Esc', desc: 'Close any modal' },
+                { keys: '⌘ Enter', desc: 'Submit analysis' },
+                { keys: '/', desc: 'Focus search bar' },
+              ].map(shortcut => (
+                <div key={shortcut.keys} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-slate-800/50 transition-colors">
+                  <span className="text-slate-300 text-sm">{shortcut.desc}</span>
+                  <kbd className="px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs font-mono text-slate-400">{shortcut.keys}</kbd>
+                </div>
+              ))}
+            </div>
+            <p className="text-slate-600 text-xs mt-6 text-center">Press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] font-mono">Esc</kbd> to close</p>
+          </div>
+        </div>
       )}
 
       {/* Pricing Modal */}
