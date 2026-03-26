@@ -90,6 +90,8 @@ import PerformancePack from './components/PerformancePack';
 import type { PerformanceReport } from './components/PerformancePack';
 import MultiRepoHealthMatrix from './components/MultiRepoHealthMatrix';
 import SmartUpgradeNudge from './components/SmartUpgradeNudge';
+import ShareCard from './components/ShareCard';
+import AnimatedDashboardPreview from './components/AnimatedDashboardPreview';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck, GitCommit } from 'lucide-react';
@@ -365,6 +367,8 @@ const App: React.FC = () => {
   const [lastAnalysisId, setLastAnalysisId] = useState<string | null>(null);
   const [lastShareToken, setLastShareToken] = useState<string | null>(null);
   const [isShared, setIsShared] = useState(false);
+  // Wave 22: ShareCard modal
+  const [showShareCard, setShowShareCard] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralCopied, setReferralCopied] = useState(false);
   const [referralStats, setReferralStats] = useState<{ count: number; daysEarned: number }>({ count: 0, daysEarned: 0 });
@@ -1689,6 +1693,17 @@ const App: React.FC = () => {
           await ensureUserProfile(user).catch((err) => {
             addLog(`Profile sync warning: ${getErrorText(err)}`, 'error');
           });
+          // Wave 22: trigger welcome email drip for brand-new signups (account < 60s old)
+          if (user.created_at) {
+            const ageMs = Date.now() - new Date(user.created_at).getTime();
+            if (ageMs < 60_000) {
+              fetch('/api/email-drip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, email: user.email, name: user.user_metadata?.full_name || user.user_metadata?.name || user.email, event: 'signup' }),
+              }).catch(() => {});
+            }
+          }
           await loadUserWorkspaces(user);
           // Load subscription status
           const sub = await getSubscriptionStatus(user.id).catch(() => subscription);
@@ -3506,6 +3521,14 @@ ${errorMessage}`);
                           }`}
                         >
                           <Share2 className="w-3.5 h-3.5" /> {isShared ? 'Shared' : 'Share'}
+                        </button>
+                      )}
+                      {analysis && repo && (
+                        <button
+                          onClick={() => setShowShareCard(true)}
+                          className="px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 bg-slate-800 hover:bg-violet-600 text-slate-300 hover:text-white border border-slate-700 hover:border-violet-500"
+                        >
+                          <Twitter className="w-3.5 h-3.5" /> Share Card
                         </button>
                       )}
                       {authUser && repo && (
@@ -5954,6 +5977,9 @@ ${errorMessage}`);
               </div>
             </div>
 
+            {/* Wave 22: Animated Dashboard Preview */}
+            <AnimatedDashboardPreview />
+
             {/* Feature Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-12 sm:mb-24">
               {[
@@ -6237,6 +6263,19 @@ ${errorMessage}`);
           owner={repo.owner}
           repo={repo.repo}
           onClose={() => setShowBadgeEmbed(false)}
+        />
+      )}
+
+      {/* Wave 22: Share Card Modal */}
+      {showShareCard && analysis && repo && (
+        <ShareCard
+          repoOwner={repo.owner}
+          repoName={repo.repo}
+          scorecard={analysis.scorecard}
+          summary={analysis.summary}
+          techStack={analysis.techStack ?? []}
+          shareUrl={lastShareToken ? `${window.location.origin}/share/${lastShareToken}` : undefined}
+          onClose={() => setShowShareCard(false)}
         />
       )}
 
