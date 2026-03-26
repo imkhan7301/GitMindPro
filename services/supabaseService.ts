@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { AnalysisResult, PRReviewResult, SavedAnalysis, SavedPRReview, Workspace, WorkspaceInvitation, WorkspaceMember } from '../types';
+import { AnalysisResult, PRReviewResult, SavedAnalysis, SavedPRReview, Scorecard, Workspace, WorkspaceInvitation, WorkspaceMember } from '../types';
 
 // Fallback values are anon/public and keep auth working if a deployment misses env injection.
 const fallbackSupabaseUrl = 'https://kkdgrbixapjlpynuulie.supabase.co';
@@ -563,3 +563,75 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionR
   if (error || !data) return null;
   return data as SubscriptionRow;
 }
+
+// --- Shareable analysis links ---
+
+export const toggleAnalysisPublic = async (analysisId: string, isPublic: boolean): Promise<string | null> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('analyses')
+    .update({ is_public: isPublic })
+    .eq('id', analysisId)
+    .select('share_token')
+    .single();
+
+  if (error) throw new Error(`Failed to update share status: ${error.message}`);
+  return isPublic ? (data?.share_token as string) || null : null;
+};
+
+export const getPublicAnalysis = async (shareToken: string): Promise<{
+  repoOwner: string;
+  repoName: string;
+  repoUrl: string;
+  summary: string;
+  techStack: string[];
+  scorecard: Scorecard;
+  rawAnalysis: AnalysisResult;
+  createdAt: string;
+} | null> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('analyses')
+    .select('repo_owner, repo_name, repo_url, summary, tech_stack, scorecard, raw_analysis, created_at')
+    .eq('share_token', shareToken)
+    .eq('is_public', true)
+    .single();
+
+  if (error || !data) return null;
+  return {
+    repoOwner: data.repo_owner as string,
+    repoName: data.repo_name as string,
+    repoUrl: data.repo_url as string,
+    summary: (data.summary ?? '') as string,
+    techStack: (data.tech_stack ?? []) as string[],
+    scorecard: data.scorecard as Scorecard,
+    rawAnalysis: data.raw_analysis as AnalysisResult,
+    createdAt: data.created_at as string,
+  };
+};
+
+export const saveAnalysisRecordReturningId = async (params: {
+  userId: string;
+  organizationId?: string | null;
+  repoOwner: string;
+  repoName: string;
+  repoUrl: string;
+  analysis: AnalysisResult;
+}): Promise<{ id: string; shareToken: string }> => {
+  const supabase = getClient();
+
+  const { data, error } = await supabase.from('analyses').insert({
+    user_id: params.userId,
+    organization_id: params.organizationId ?? null,
+    repo_owner: params.repoOwner,
+    repo_name: params.repoName,
+    repo_url: params.repoUrl,
+    summary: params.analysis.summary,
+    tech_stack: params.analysis.techStack,
+    scorecard: params.analysis.scorecard,
+    raw_analysis: params.analysis,
+  }).select('id, share_token').single();
+
+  if (error || !data) throw new Error(`Failed to save analysis: ${error?.message || 'Unknown error'}`);
+  return { id: String(data.id), shareToken: data.share_token as string };
+};

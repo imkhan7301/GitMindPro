@@ -72,6 +72,13 @@ create table if not exists public.workspace_invitations (
 
 create index if not exists idx_analyses_user_created_at on public.analyses(user_id, created_at desc);
 create index if not exists idx_analyses_org_created_at on public.analyses(organization_id, created_at desc);
+
+-- Shareable analysis links
+alter table public.analyses
+  add column if not exists share_token text unique default lower(encode(gen_random_bytes(8), 'hex')),
+  add column if not exists is_public boolean not null default false;
+
+create index if not exists idx_analyses_share_token on public.analyses(share_token) where is_public = true;
 create index if not exists idx_org_memberships_user on public.organization_memberships(user_id);
 create index if not exists idx_projects_org on public.projects(organization_id);
 create index if not exists idx_workspace_invitations_org on public.workspace_invitations(organization_id, created_at desc);
