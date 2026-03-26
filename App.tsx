@@ -15,7 +15,7 @@ import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
 import AnalysisHistory from './components/AnalysisHistory';
 import PricingModal from './components/PricingModal';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -184,6 +184,7 @@ const App: React.FC = () => {
   // Subscription state
   const [subscription, setSubscription] = useState<SubscriptionStatus>({ plan: 'free', status: 'none', currentPeriodEnd: null, isActive: false });
   const [showPricing, setShowPricing] = useState(false);
+  const [checkoutBanner, setCheckoutBanner] = useState<{ type: 'success' | 'canceled'; plan?: string } | null>(null);
   const freeDailyAnalysisLimit = getEffectiveDailyLimit(subscription);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
@@ -424,18 +425,33 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const checkoutStatus = params.get('checkout');
     if (checkoutStatus === 'success') {
-      addLog('🎉 Subscription activated! Welcome to Pro.', 'success');
       clearSubscriptionCache();
       if (authUser) {
-        void getSubscriptionStatus(authUser.id).then(setSubscription);
+        void getSubscriptionStatus(authUser.id).then((sub) => {
+          setSubscription(sub);
+          const planName = sub.plan === 'team' ? 'Team' : 'Pro';
+          addLog(`🎉 Subscription activated! Welcome to ${planName}.`, 'success');
+          setCheckoutBanner({ type: 'success', plan: planName });
+        });
+      } else {
+        addLog('🎉 Subscription activated!', 'success');
+        setCheckoutBanner({ type: 'success' });
       }
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
     } else if (checkoutStatus === 'canceled') {
-      addLog('Checkout canceled.', 'info');
+      addLog('Checkout canceled — no charges were made.', 'info');
+      setCheckoutBanner({ type: 'canceled' });
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [authUser, addLog]);
+
+  // Auto-dismiss checkout banner
+  useEffect(() => {
+    if (!checkoutBanner) return;
+    const timer = setTimeout(() => setCheckoutBanner(null), 8000);
+    return () => clearTimeout(timer);
+  }, [checkoutBanner]);
 
   const handleCreateWorkspace = async () => {
     if (!authUser) {
@@ -1519,6 +1535,34 @@ ${errorMessage}`);
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30">
+      {checkoutBanner && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-sm animate-in slide-in-from-top duration-300 flex items-center gap-3 ${
+          checkoutBanner.type === 'success'
+            ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200'
+            : 'bg-slate-900/90 border-slate-700 text-slate-300'
+        }`}>
+          {checkoutBanner.type === 'success' ? (
+            <>
+              <span className="text-2xl">🎉</span>
+              <div>
+                <p className="font-bold text-white">Welcome to {checkoutBanner.plan || 'Pro'}!</p>
+                <p className="text-sm opacity-80">Your subscription is active. Enjoy unlimited analyses!</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-2xl">↩️</span>
+              <div>
+                <p className="font-bold text-white">Checkout canceled</p>
+                <p className="text-sm opacity-80">No charges were made. You can upgrade anytime.</p>
+              </div>
+            </>
+          )}
+          <button onClick={() => setCheckoutBanner(null)} className="ml-4 p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <nav className="border-b border-slate-800 bg-[#020617]/95 backdrop-blur-2xl sticky top-0 z-50">
         <div className="max-w-[1900px] mx-auto px-10 h-24 flex items-center justify-between">
           <div className="flex items-center gap-6">
