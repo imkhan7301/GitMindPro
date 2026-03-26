@@ -23,8 +23,11 @@ import NotificationCenter from './components/NotificationCenter';
 import type { AppNotification } from './components/NotificationCenter';
 import OnboardingWizard from './components/OnboardingWizard';
 import TrendChart from './components/TrendChart';
+import SettingsPanel from './components/SettingsPanel';
+import AnalysisDiff from './components/AnalysisDiff';
+import BadgeEmbed from './components/BadgeEmbed';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -316,6 +319,9 @@ const App: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('gitmind.onboarded'));
   const [showExpertHire, setShowExpertHire] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showBadgeEmbed, setShowBadgeEmbed] = useState(false);
+  const [showAnalysisDiff, setShowAnalysisDiff] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -475,18 +481,7 @@ const App: React.FC = () => {
     }
   }, [lastAnalysisId, isShared, addLog]);
 
-  const copyBadgeSnippet = useCallback(async () => {
-    if (!repo) return;
-    const md = `[![GitMind Score](https://gitmindpro.vercel.app/api/badge?owner=${repo.owner}&repo=${repo.repo})](https://gitmindpro.vercel.app)`;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(md);
-      }
-      addLog('Badge markdown copied! Paste it in your README.md', 'success');
-    } catch {
-      addLog('Failed to copy badge snippet', 'error');
-    }
-  }, [repo, addLog]);
+
 
   const toggleFavorite = useCallback((repoUrl: string) => {
     setFavorites(prev => {
@@ -2047,6 +2042,13 @@ ${errorMessage}`);
                     {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                   </button>
                   <button
+                    onClick={() => setShowSettings(true)}
+                    className="flex items-center gap-2 px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+                    title="Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={handleSignOut}
                     disabled={authBusy}
                     className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
@@ -2357,7 +2359,7 @@ ${errorMessage}`);
                       )}
                       {repo && (
                         <button
-                          onClick={() => void copyBadgeSnippet()}
+                          onClick={() => setShowBadgeEmbed(true)}
                           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
                         >
                           <Link className="w-3.5 h-3.5" /> Badge
@@ -3665,6 +3667,11 @@ ${errorMessage}`);
               <button onClick={() => setDashboardTab('compare')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${dashboardTab === 'compare' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
                 <GitBranch className="w-3.5 h-3.5" /> Compare
               </button>
+              {analysisHistory.length >= 2 && (
+                <button onClick={() => setShowAnalysisDiff(true)} className="px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 text-slate-500 hover:text-white">
+                  <BarChart3 className="w-3.5 h-3.5" /> Diff
+                </button>
+              )}
             </div>
 
             {dashboardTab === 'marketplace' ? (
@@ -4076,6 +4083,8 @@ ${errorMessage}`);
           { id: 'demo', label: 'Try Demo — React', desc: 'Analyze facebook/react', icon: Rocket, action: () => { setCmdPaletteOpen(false); setUrl('https://github.com/facebook/react'); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100); } },
           { id: 'theme', label: theme === 'dark' ? 'Light Mode' : 'Dark Mode', desc: 'Toggle theme', icon: theme === 'dark' ? Sun : Moon, action: () => { setCmdPaletteOpen(false); toggleTheme(); } },
           { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View all shortcuts', icon: Zap, action: () => { setCmdPaletteOpen(false); setShowShortcuts(true); } },
+          { id: 'settings', label: 'Settings', desc: 'Theme, notifications, API keys', icon: Settings, action: () => { setCmdPaletteOpen(false); setShowSettings(true); } },
+          ...(analysisHistory.length >= 2 ? [{ id: 'diff', label: 'Analysis Diff', desc: 'Compare analyses over time', icon: BarChart3, action: () => { setCmdPaletteOpen(false); setShowAnalysisDiff(true); } }] : []),
           { id: 'pricing', label: 'Pricing & Plans', desc: subscription.plan === 'free' ? 'Upgrade to Pro' : 'Manage billing', icon: CreditCard, action: () => { setCmdPaletteOpen(false); setShowPricing(true); } },
           { id: 'compare', label: 'Compare Repos', desc: 'Side-by-side AI analysis', icon: GitBranch, action: () => { setCmdPaletteOpen(false); setDashboardTab('compare'); } },
           { id: 'marketplace', label: 'Expert Marketplace', desc: 'Hire developers or list your skills', icon: Briefcase, action: () => { setCmdPaletteOpen(false); setDashboardTab('marketplace'); } },
@@ -4203,6 +4212,33 @@ ${errorMessage}`);
               }, 100);
             }
           }}
+        />
+      )}
+
+      {/* Settings Panel */}
+      {showSettings && authUser && (
+        <SettingsPanel
+          authUser={authUser}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Badge Embed Modal */}
+      {showBadgeEmbed && repo && (
+        <BadgeEmbed
+          owner={repo.owner}
+          repo={repo.repo}
+          onClose={() => setShowBadgeEmbed(false)}
+        />
+      )}
+
+      {/* Analysis Diff Modal */}
+      {showAnalysisDiff && (
+        <AnalysisDiff
+          analyses={analysisHistory}
+          onClose={() => setShowAnalysisDiff(false)}
         />
       )}
 
