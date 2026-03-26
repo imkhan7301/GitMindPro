@@ -1422,3 +1422,290 @@ export const analyzeBlameIntelligence = async (params: {
 
   return JSON.parse(response.text || '[]') as BlameInsight[];
 };
+
+// ── Wave 13: AI Pull Request Reviewer ──────────────────────────────────────
+
+export interface PRReviewComment {
+  file: string;
+  severity: 'critical' | 'high' | 'medium' | 'suggestion';
+  category: 'security' | 'performance' | 'architecture' | 'testing' | 'style' | 'correctness';
+  line?: number;
+  issue: string;
+  suggestion: string;
+}
+
+export interface AIReviewResult {
+  summary: string;
+  verdict: 'approve' | 'request_changes' | 'comment';
+  riskScore: number;          // 0-100
+  comments: PRReviewComment[];
+  missingTests: string[];
+  securityFlags: string[];
+  architectureNotes: string[];
+  reviewBody: string;         // full markdown body ready to post as GitHub review
+}
+
+export const generateAIPRReview = async (params: {
+  prTitle: string;
+  prBody: string;
+  baseBranch: string;
+  headBranch: string;
+  files: { filename: string; status: string; patch?: string; additions: number; deletions: number }[];
+  repoContext: string;  // summary of the repo
+  techStack: string[];
+}): Promise<AIReviewResult> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const patchSummary = params.files
+    .slice(0, 20)
+    .map(f => `### ${f.status.toUpperCase()} ${f.filename} (+${f.additions}/-${f.deletions})\n\`\`\`diff\n${(f.patch || '').slice(0, 800)}\n\`\`\``)
+    .join('\n\n');
+
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a senior staff engineer performing a thorough code review.\n` +
+          `Repository context: ${params.repoContext}\n` +
+          `Tech stack: ${params.techStack.join(', ')}\n\n` +
+          `PR: "${params.prTitle}" — ${params.baseBranch} ← ${params.headBranch}\n` +
+          `Description: ${params.prBody || 'No description provided.'}\n\n` +
+          `Changed files (${params.files.length} total, showing up to 20):\n${patchSummary}\n\n` +
+          `Produce a structured code review:\n` +
+          `- verdict: "approve" / "request_changes" / "comment"\n` +
+          `- riskScore: 0-100 (how risky is merging this PR right now)\n` +
+          `- summary: 2-3 sentence executive summary\n` +
+          `- comments: array of inline-style findings (file, severity, category, issue, suggestion)\n` +
+          `- missingTests: list of code paths that should have tests but don't\n` +
+          `- securityFlags: any security-relevant patterns (XSS, injection, auth bypass, secrets)\n` +
+          `- architectureNotes: significant design observations\n` +
+          `- reviewBody: full review as clean GitHub markdown (include table of findings, summary, and recommendation). Use emojis for visual clarity.\n` +
+          `Be specific. Reference actual file names and code. Max 8 inline comments.`
+      }]
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING },
+          verdict: { type: Type.STRING },
+          riskScore: { type: Type.NUMBER },
+          comments: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                file: { type: Type.STRING },
+                severity: { type: Type.STRING },
+                category: { type: Type.STRING },
+                issue: { type: Type.STRING },
+                suggestion: { type: Type.STRING },
+              },
+              required: ['file', 'severity', 'category', 'issue', 'suggestion'],
+            }
+          },
+          missingTests: { type: Type.ARRAY, items: { type: Type.STRING } },
+          securityFlags: { type: Type.ARRAY, items: { type: Type.STRING } },
+          architectureNotes: { type: Type.ARRAY, items: { type: Type.STRING } },
+          reviewBody: { type: Type.STRING },
+        },
+        required: ['summary', 'verdict', 'riskScore', 'comments', 'missingTests', 'securityFlags', 'architectureNotes', 'reviewBody'],
+      }
+    }
+  }, 'ai PR review');
+
+  return JSON.parse(response.text || '{}') as AIReviewResult;
+};
+
+// ── Wave 13: Tech Debt Dollar Calculator ───────────────────────────────────
+
+export interface TechDebtCategory {
+  category: string;
+  estimatedHours: number;
+  dollarValue: number;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  examples: string[];
+  recommendation: string;
+}
+
+export interface TechDebtReport {
+  totalDollarValue: number;
+  totalHours: number;
+  hourlyRate: number;
+  categories: TechDebtCategory[];
+  headline: string;     // e.g. "Your codebase carries $127,500 in tech debt"
+  executiveSummary: string;
+  quickWins: string[];  // highest-ROI items to fix first
+}
+
+export const calculateTechDebt = async (params: {
+  repoName: string;
+  techStack: string[];
+  scorecard: { overall: number; security: number; performance: number; maintainability: number; testing: number };
+  summary: string;
+  fileCount: number;
+  contributors: number;
+  openIssues: number;
+  findings: string[];   // from deep audit vulnerabilities
+  depRisks?: { name: string; risk: string; reason: string }[];
+}): Promise<TechDebtReport> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const hourlyRate = 150; // industry standard senior engineer rate
+
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a software economics analyst quantifying technical debt in dollars.\n` +
+          `Repository: ${params.repoName}\n` +
+          `Tech Stack: ${params.techStack.join(', ')}\n` +
+          `Team size: ${params.contributors} contributors | Files: ${params.fileCount} | Open issues: ${params.openIssues}\n\n` +
+          `Quality Scores (0-100):\n` +
+          `  Overall: ${params.scorecard.overall} | Security: ${params.scorecard.security} | Performance: ${params.scorecard.performance} | Maintainability: ${params.scorecard.maintainability} | Testing: ${params.scorecard.testing}\n\n` +
+          `Repository summary: ${params.summary}\n` +
+          `Known issues:\n${params.findings.slice(0, 10).map(f => `- ${f}`).join('\n')}\n` +
+          `Dependency risks: ${(params.depRisks || []).slice(0, 5).map(d => `${d.name} (${d.risk})`).join(', ')}\n\n` +
+          `Assume senior engineer hourly rate = $${hourlyRate}/hr.\n` +
+          `Calculate tech debt across these categories: complexity, test_coverage, documentation, security, dependencies, architecture.\n` +
+          `For each category: estimate hours to remediate → multiply by $${hourlyRate} → dollar value.\n` +
+          `Be realistic. A repo scoring 70+ overall shouldn't have $500k in debt.\n` +
+          `Return:\n` +
+          `- totalDollarValue: sum of all categories\n` +
+          `- totalHours: sum of all hours\n` +
+          `- hourlyRate: ${hourlyRate}\n` +
+          `- categories: array of debt entries\n` +
+          `- headline: punchy single sentence ("Your codebase carries $X in technical debt")\n` +
+          `- executiveSummary: 2 sentences for a non-technical CEO\n` +
+          `- quickWins: top 3 items to fix first for highest ROI`
+      }]
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          totalDollarValue: { type: Type.NUMBER },
+          totalHours: { type: Type.NUMBER },
+          hourlyRate: { type: Type.NUMBER },
+          headline: { type: Type.STRING },
+          executiveSummary: { type: Type.STRING },
+          quickWins: { type: Type.ARRAY, items: { type: Type.STRING } },
+          categories: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                category: { type: Type.STRING },
+                estimatedHours: { type: Type.NUMBER },
+                dollarValue: { type: Type.NUMBER },
+                severity: { type: Type.STRING },
+                examples: { type: Type.ARRAY, items: { type: Type.STRING } },
+                recommendation: { type: Type.STRING },
+              },
+              required: ['category', 'estimatedHours', 'dollarValue', 'severity', 'examples', 'recommendation'],
+            }
+          },
+        },
+        required: ['totalDollarValue', 'totalHours', 'hourlyRate', 'headline', 'executiveSummary', 'quickWins', 'categories'],
+      }
+    }
+  }, 'tech debt calculator');
+
+  return JSON.parse(response.text || '{}') as TechDebtReport;
+};
+
+// ── Wave 13: CVE Intelligence Scanner ─────────────────────────────────────
+
+export interface CVEFinding {
+  package: string;
+  version: string;
+  cveId: string;
+  cvssScore: number;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  description: string;
+  patchVersion: string;
+  patchCommand: string;
+  affectedArea: string;  // what part of the app this likely impacts
+}
+
+export interface CVEReport {
+  findings: CVEFinding[];
+  totalCritical: number;
+  totalHigh: number;
+  compliance: 'blocked' | 'at_risk' | 'acceptable';
+  remediationPriority: string[];   // ordered list of packages to patch first
+  estimatedRiskExposure: string;   // human-readable risk statement
+}
+
+export const scanCVEs = async (params: {
+  repoName: string;
+  dependencies: { name: string; version: string; risk?: string }[];
+  techStack: string[];
+  isProduction: boolean;
+}): Promise<CVEReport> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const depList = params.dependencies
+    .slice(0, 40)
+    .map(d => `${d.name}@${d.version}${d.risk ? ` [known risk: ${d.risk}]` : ''}`)
+    .join('\n');
+
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a security researcher with deep knowledge of CVE databases (NVD, OSV, GitHub Advisory).\n` +
+          `Repository: ${params.repoName} | Production: ${params.isProduction}\n` +
+          `Tech stack: ${params.techStack.join(', ')}\n\n` +
+          `Dependencies to scan:\n${depList}\n\n` +
+          `Cross-reference these packages and versions against known CVEs.\n` +
+          `Focus on real, documented CVEs (e.g., CVE-2021-23337 in lodash, CVE-2022-25883 in semver, etc.).\n` +
+          `Only include CVEs that are plausible for the listed version numbers.\n` +
+          `For each finding:\n` +
+          `- cveId: real CVE ID or "NO-CVE-XXXX" for advisory-only\n` +
+          `- cvssScore: 0.0-10.0\n` +
+          `- severity: critical(9+)/high(7-8.9)/medium(4-6.9)/low(<4)\n` +
+          `- patchVersion: minimum safe version\n` +
+          `- patchCommand: exact npm/pip/cargo command to fix\n` +
+          `- affectedArea: which part of the app this likely impacts (auth, API, storage, etc.)\n` +
+          `compliance: "blocked" (has critical), "at_risk" (has high), "acceptable" (only medium/low)\n` +
+          `remediationPriority: ordered list of package names (patch these first)\n` +
+          `estimatedRiskExposure: 1 sentence risk statement for executives\n` +
+          `Return empty findings array if no real CVEs are known for these packages.`
+      }]
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          findings: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                package: { type: Type.STRING },
+                version: { type: Type.STRING },
+                cveId: { type: Type.STRING },
+                cvssScore: { type: Type.NUMBER },
+                severity: { type: Type.STRING },
+                description: { type: Type.STRING },
+                patchVersion: { type: Type.STRING },
+                patchCommand: { type: Type.STRING },
+                affectedArea: { type: Type.STRING },
+              },
+              required: ['package', 'version', 'cveId', 'cvssScore', 'severity', 'description', 'patchVersion', 'patchCommand', 'affectedArea'],
+            }
+          },
+          totalCritical: { type: Type.NUMBER },
+          totalHigh: { type: Type.NUMBER },
+          compliance: { type: Type.STRING },
+          remediationPriority: { type: Type.ARRAY, items: { type: Type.STRING } },
+          estimatedRiskExposure: { type: Type.STRING },
+        },
+        required: ['findings', 'totalCritical', 'totalHigh', 'compliance', 'remediationPriority', 'estimatedRiskExposure'],
+      }
+    }
+  }, 'CVE scanner');
+
+  return JSON.parse(response.text || '{}') as CVEReport;
+};

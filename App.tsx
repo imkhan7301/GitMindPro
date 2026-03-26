@@ -4,8 +4,8 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence } from './services/geminiService';
-import type { DepRisk, BlameInsight } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs } from './services/geminiService';
+import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
@@ -44,6 +44,9 @@ import PinnedInsight, { savePinnedInsight } from './components/PinnedInsight';
 import RepoLeaderboard from './components/RepoLeaderboard';
 import ReadmeGenerator from './components/ReadmeGenerator';
 import BlameIntelligence from './components/BlameIntelligence';
+import PRReviewer from './components/PRReviewer';
+import TechDebtCalculator from './components/TechDebtCalculator';
+import CVEMonitor from './components/CVEMonitor';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
 
@@ -386,6 +389,21 @@ const App: React.FC = () => {
   const [blameInsights, setBlameInsights] = useState<BlameInsight[] | null>(null);
   const [blameLoading, setBlameLoading] = useState(false);
 
+  // Wave 13: AI PR Reviewer (isolated state — separate from legacy PR review)
+  const [aiPrUrl, setAiPrUrl] = useState('');
+  const [aiPrResult, setAiPrResult] = useState<AIReviewResult | null>(null);
+  const [aiPrLoading, setAiPrLoading] = useState(false);
+  const [aiPrPosting, setAiPrPosting] = useState(false);
+  const [aiPrPostUrl, setAiPrPostUrl] = useState<string | null>(null);
+
+  // Wave 13: Tech Debt Calculator state
+  const [techDebtReport, setTechDebtReport] = useState<TechDebtReport | null>(null);
+  const [techDebtLoading, setTechDebtLoading] = useState(false);
+
+  // Wave 13: CVE Monitor state
+  const [cveReport, setCveReport] = useState<CVEReport | null>(null);
+  const [cveLoading, setCveLoading] = useState(false);
+
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try { return JSON.parse(localStorage.getItem('gitmind.notifications') || '[]'); } catch { return []; }
@@ -717,6 +735,129 @@ const App: React.FC = () => {
       setBlameLoading(false);
     }
   }, [repo, analysis, deepAudit, addNotification]);
+
+  // Wave 13: AI PR Reviewer
+  const handleAIPRReview = useCallback(async () => {
+    if (!repo || !analysis) return;
+    const prNumberMatch = aiPrUrl.match(/\/pull\/(\d+)/);
+    const prNumber = prNumberMatch ? parseInt(prNumberMatch[1], 10) : NaN;
+    if (isNaN(prNumber)) {
+      addNotification({ type: 'system', title: 'Invalid PR URL', message: 'Paste a full GitHub pull request URL, e.g. https://github.com/owner/repo/pull/42' });
+      return;
+    }
+    setAiPrLoading(true);
+    setAiPrResult(null);
+    setAiPrPostUrl(null);
+    try {
+      const files = await fetchPullRequestFiles(repo.owner, repo.repo, prNumber);
+      const prs = await fetchPullRequests(repo.owner, repo.repo);
+      const pr = prs.find(p => p.number === prNumber);
+      const result = await generateAIPRReview({
+        prTitle: pr?.title ?? `PR #${prNumber}`,
+        prBody: '',
+        baseBranch: repo.defaultBranch ?? 'main',
+        headBranch: 'feature',
+        files: files.map(f => ({
+          filename: f.filename,
+          status: f.status,
+          patch: f.patch,
+          additions: f.additions,
+          deletions: f.deletions,
+        })),
+        repoContext: analysis.summary ?? '',
+        techStack: analysis.techStack,
+      });
+      setAiPrResult(result);
+      addNotification({ type: 'analysis_complete', title: 'PR Review Ready', message: `Reviewed PR #${prNumber} — ${result.verdict}` });
+    } catch (err) {
+      addNotification({ type: 'system', title: 'PR Review Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setAiPrLoading(false);
+    }
+  }, [repo, analysis, aiPrUrl, addNotification]);
+
+  const handlePostAIPRReview = useCallback(async () => {
+    if (!repo || !aiPrResult) return;
+    const prNumberMatch = aiPrUrl.match(/\/pull\/(\d+)/);
+    const prNumber = prNumberMatch ? parseInt(prNumberMatch[1], 10) : NaN;
+    if (isNaN(prNumber)) return;
+    setAiPrPosting(true);
+    try {
+      await postPRComment(repo.owner, repo.repo, prNumber, aiPrResult.reviewBody);
+      const url = `https://github.com/${repo.owner}/${repo.repo}/pull/${prNumber}`;
+      setAiPrPostUrl(url);
+      addNotification({ type: 'analysis_complete', title: 'Review Posted!', message: `Review posted to PR #${prNumber}` });
+    } catch (err) {
+      addNotification({ type: 'system', title: 'Post Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setAiPrPosting(false);
+    }
+  }, [repo, aiPrUrl, aiPrResult, addNotification]);
+
+  // Wave 13: Tech Debt Calculator
+  const handleCalculateTechDebt = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setTechDebtLoading(true);
+    setTechDebtReport(null);
+    try {
+      const report = await calculateTechDebt({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        scorecard: {
+          overall: analysis.scorecard.security ?? 50,
+          security: analysis.scorecard.security ?? 50,
+          performance: analysis.scorecard.innovation ?? 50,
+          maintainability: analysis.scorecard.maintenance ?? 50,
+          testing: analysis.scorecard.documentation ?? 50,
+        },
+        summary: analysis.summary ?? '',
+        fileCount: structure.length,
+        contributors: 0,
+        openIssues: 0,
+        findings: deepAudit?.vulnerabilities ?? [],
+        depRisks: (depRisks ?? []).map(d => ({ name: d.name, risk: d.risk, reason: d.reason })),
+      });
+      setTechDebtReport(report);
+      addNotification({ type: 'analysis_complete', title: 'Tech Debt Calculated', message: report.headline });
+    } catch (err) {
+      addNotification({ type: 'system', title: 'Tech Debt Calc Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setTechDebtLoading(false);
+    }
+  }, [repo, analysis, structure, deepAudit, depRisks, addNotification]);
+
+  // Wave 13: CVE Monitor
+  const handleScanCVEs = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setCveLoading(true);
+    setCveReport(null);
+    try {
+      const rawDeps = await analyzeDependencies(repo.owner, repo.repo);
+      const deps = (rawDeps as { name: string; version?: string; currentVersion?: string; risk?: string }[]).map(d => ({
+        name: d.name,
+        version: d.currentVersion ?? d.version ?? 'unknown',
+        risk: d.risk,
+      }));
+      const report = await scanCVEs({
+        repoName: `${repo.owner}/${repo.repo}`,
+        dependencies: deps,
+        techStack: analysis.techStack,
+        isProduction: true,
+      });
+      setCveReport(report);
+      const critCount = report.totalCritical;
+      addNotification({
+        type: critCount > 0 ? 'system' : 'analysis_complete',
+        title: critCount > 0 ? `${critCount} Critical CVE${critCount > 1 ? 's' : ''} Found!` : 'CVE Scan Complete',
+        message: report.estimatedRiskExposure,
+      });
+    } catch (err) {
+      addNotification({ type: 'system', title: 'CVE Scan Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setCveLoading(false);
+    }
+  }, [repo, analysis, addNotification]);
+
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -1479,6 +1620,11 @@ const App: React.FC = () => {
     setReadmeCommitUrl(null);
     setReadmeCommitError(null);
     setBlameInsights(null);
+    // Wave 13: reset PR Reviewer, Tech Debt, CVE state
+    setAiPrResult(null);
+    setAiPrPostUrl(null);
+    setTechDebtReport(null);
+    setCveReport(null);
     addLog(`Fetching repository...`, 'info');
     
     try {
@@ -4109,6 +4255,96 @@ ${errorMessage}`);
                        isPro={subscription?.plan === 'pro' || subscription?.plan === 'team'}
                        onUpgrade={() => setShowPricing(true)}
                      />
+                   </div>
+
+                   {/* ── Wave 13: AI PR Reviewer ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <GitPullRequest className="w-6 h-6 text-indigo-400" /> AI Pull Request Reviewer
+                         </h2>
+                         <p className="text-slate-400 text-sm">Paste a PR URL → get a full structured code review cross-referenced with this repo&apos;s analysis, security findings, and blame data.</p>
+                       </div>
+                     </div>
+                     <div className="flex gap-3 mb-6">
+                       <input
+                         type="url"
+                         value={aiPrUrl}
+                         onChange={e => setAiPrUrl(e.target.value)}
+                         placeholder="https://github.com/owner/repo/pull/42"
+                         className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors font-mono"
+                       />
+                       <button
+                         onClick={() => void handleAIPRReview()}
+                         disabled={aiPrLoading || !aiPrUrl.trim()}
+                         className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl text-sm font-bold text-white transition-all"
+                       >
+                         {aiPrLoading ? 'Reviewing…' : <><Zap className="w-4 h-4" /> Review PR</>}
+                       </button>
+                     </div>
+                     {aiPrLoading && <Loader message="Analyzing pull request…" />}
+                     {aiPrResult && !aiPrLoading && (
+                       <PRReviewer
+                         review={aiPrResult}
+                         onPostReview={handlePostAIPRReview}
+                         posting={aiPrPosting}
+                         postUrl={aiPrPostUrl}
+                         prUrl={aiPrUrl}
+                       />
+                     )}
+                   </div>
+
+                   {/* ── Wave 13: Tech Debt Dollar Calculator ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <BarChart3 className="w-6 h-6 text-orange-400" /> Tech Debt Dollar Calculator
+                         </h2>
+                         <p className="text-slate-400 text-sm">Turn abstract code quality scores into a dollar figure executives understand — broken down by category with quick wins.</p>
+                       </div>
+                       {!techDebtReport && !techDebtLoading && (
+                         <button
+                           onClick={() => void handleCalculateTechDebt()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-orange-500/20"
+                         >
+                           <BarChart3 className="w-4 h-4" /> Calculate Debt
+                         </button>
+                       )}
+                     </div>
+                     {techDebtLoading && <Loader message="Calculating tech debt cost…" />}
+                     {techDebtReport && !techDebtLoading && (
+                       <TechDebtCalculator report={techDebtReport} />
+                     )}
+                   </div>
+
+                   {/* ── Wave 13: CVE Intelligence Scanner ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <ShieldCheck className="w-6 h-6 text-rose-400" /> CVE Intelligence Scanner
+                         </h2>
+                         <p className="text-slate-400 text-sm">Cross-reference your dependencies against known CVE databases — real CVE IDs, CVSS scores, and exact patch commands.</p>
+                       </div>
+                       {!cveReport && !cveLoading && (
+                         <button
+                           onClick={() => void handleScanCVEs()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 rounded-xl text-sm font-bold text-white transition-all"
+                         >
+                           <ShieldCheck className="w-4 h-4" /> Scan CVEs
+                         </button>
+                       )}
+                     </div>
+                     {cveLoading && <Loader message="Cross-referencing CVE databases…" />}
+                     {cveReport && !cveLoading && (
+                       <CVEMonitor
+                         report={cveReport}
+                         isPro={subscription?.plan === 'pro' || subscription?.plan === 'team'}
+                         onUpgrade={() => setShowPricing(true)}
+                       />
+                     )}
                    </div>
                  </div>
                )}
