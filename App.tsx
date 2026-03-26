@@ -184,7 +184,7 @@ const App: React.FC = () => {
   // Subscription state
   const [subscription, setSubscription] = useState<SubscriptionStatus>({ plan: 'free', status: 'none', currentPeriodEnd: null, isActive: false });
   const [showPricing, setShowPricing] = useState(false);
-  const [checkoutBanner, setCheckoutBanner] = useState<{ type: 'success' | 'canceled'; plan?: string } | null>(null);
+  const [checkoutBanner, setCheckoutBanner] = useState<{ type: 'success' | 'canceled'; plan?: string; trial?: boolean } | null>(null);
   const freeDailyAnalysisLimit = getEffectiveDailyLimit(subscription);
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
@@ -430,8 +430,9 @@ const App: React.FC = () => {
         void getSubscriptionStatus(authUser.id).then((sub) => {
           setSubscription(sub);
           const planName = sub.plan === 'team' ? 'Team' : 'Pro';
-          addLog(`🎉 Subscription activated! Welcome to ${planName}.`, 'success');
-          setCheckoutBanner({ type: 'success', plan: planName });
+          const isTrial = sub.status === 'trialing';
+          addLog(isTrial ? `🎉 ${planName} trial started! 7 days free.` : `🎉 Subscription activated! Welcome to ${planName}.`, 'success');
+          setCheckoutBanner({ type: 'success', plan: planName, trial: isTrial });
         });
       } else {
         addLog('🎉 Subscription activated!', 'success');
@@ -1545,8 +1546,8 @@ ${errorMessage}`);
             <>
               <span className="text-2xl">🎉</span>
               <div>
-                <p className="font-bold text-white">Welcome to {checkoutBanner.plan || 'Pro'}!</p>
-                <p className="text-sm opacity-80">Your subscription is active. Enjoy unlimited analyses!</p>
+                <p className="font-bold text-white">{checkoutBanner.trial ? `${checkoutBanner.plan || 'Pro'} trial started!` : `Welcome to ${checkoutBanner.plan || 'Pro'}!`}</p>
+                <p className="text-sm opacity-80">{checkoutBanner.trial ? 'You have 7 days free — enjoy unlimited analyses!' : 'Your subscription is active. Enjoy unlimited analyses!'}</p>
               </div>
             </>
           ) : (
@@ -3377,8 +3378,8 @@ ${errorMessage}`);
         <PricingModal
           subscription={subscription}
           onClose={() => setShowPricing(false)}
-          onUpgrade={async (priceId) => {
-            await startCheckout({ priceId, userId: authUser.id, email: authUser.email || '' });
+          onUpgrade={async (priceId, trial) => {
+            await startCheckout({ priceId, userId: authUser.id, email: authUser.email || '', trial });
           }}
           onManage={async () => {
             await openBillingPortal(authUser.id);

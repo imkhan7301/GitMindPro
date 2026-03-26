@@ -4,7 +4,7 @@ import type { SubscriptionStatus } from '../services/stripeService';
 
 interface PricingModalProps {
   onClose: () => void;
-  onUpgrade: (priceId: string) => Promise<void>;
+  onUpgrade: (priceId: string, trial?: boolean) => Promise<void>;
   onManage: () => Promise<void>;
   subscription: SubscriptionStatus;
 }
@@ -26,6 +26,7 @@ const PLANS = [
     cta: 'Current Plan',
     priceId: null,
     highlight: false,
+    trial: false,
   },
   {
     name: 'Pro',
@@ -43,9 +44,10 @@ const PLANS = [
       'Priority support',
     ],
     missing: ['Team workspaces', 'Shared analysis history', 'Team analytics'],
-    cta: 'Upgrade to Pro',
+    cta: 'Start 7-Day Free Trial',
     priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || 'price_pro_placeholder',
     highlight: true,
+    trial: true,
   },
   {
     name: 'Team',
@@ -67,6 +69,7 @@ const PLANS = [
     cta: 'Upgrade to Team',
     priceId: import.meta.env.VITE_STRIPE_TEAM_PRICE_ID || 'price_team_placeholder',
     highlight: false,
+    trial: false,
   },
 ];
 
@@ -79,10 +82,10 @@ const ICON_MAP = {
 const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManage, subscription }) => {
   const [upgrading, setUpgrading] = useState(false);
 
-  const handleUpgrade = async (priceId: string) => {
+  const handleUpgrade = async (priceId: string, trial?: boolean) => {
     setUpgrading(true);
     try {
-      await onUpgrade(priceId);
+      await onUpgrade(priceId, trial);
     } catch {
       setUpgrading(false);
     }
@@ -168,7 +171,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                   )
                 ) : plan.priceId ? (
                   <button
-                    onClick={() => void handleUpgrade(plan.priceId!)}
+                    onClick={() => void handleUpgrade(plan.priceId!, plan.trial)}
                     disabled={upgrading}
                     className={`w-full px-4 py-3 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
                       plan.name === 'Team' ? 'bg-violet-600 hover:bg-violet-500' : 'bg-indigo-600 hover:bg-indigo-500'
@@ -185,6 +188,10 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                     )}
                   </button>
                 ) : null}
+
+                {plan.trial && !isCurrentPlan && (
+                  <p className="text-[10px] text-indigo-400 text-center mt-2 font-semibold">No charge for 7 days — cancel anytime</p>
+                )}
               </div>
             );
           })}

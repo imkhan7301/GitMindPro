@@ -53,6 +53,7 @@ export const startCheckout = async (params: {
   priceId: string;
   userId: string;
   email: string;
+  trial?: boolean;
 }): Promise<void> => {
   const res = await fetch('/api/checkout', {
     method: 'POST',
@@ -61,6 +62,7 @@ export const startCheckout = async (params: {
       priceId: params.priceId,
       userId: params.userId,
       email: params.email,
+      trial: params.trial ?? false,
       successUrl: `${window.location.origin}/?checkout=success`,
       cancelUrl: `${window.location.origin}/?checkout=canceled`,
     }),
