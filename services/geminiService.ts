@@ -1301,3 +1301,124 @@ export const analyzeDependencyRisks = async (params: {
 
   return JSON.parse(response.text || '[]') as DepRisk[];
 };
+
+// ─── Wave 12: AI README Generator ─────────────────────────────────────────────
+
+export const generateReadme = async (params: {
+  repoName: string;
+  owner: string;
+  description: string;
+  techStack: string[];
+  summary: string;
+  roadmap: string[];
+  stars: number;
+  defaultBranch: string;
+  hasDockerfile: boolean;
+  badgeUrl: string;
+}): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a senior developer relations engineer. Generate a production-quality README.md.\n` +
+          `Repository: ${params.owner}/${params.repoName}\n` +
+          `Description: ${params.description}\n` +
+          `Tech Stack: ${params.techStack.join(', ')}\n` +
+          `AI Summary: ${params.summary}\n` +
+          `Roadmap: ${params.roadmap.slice(0, 5).join('; ')}\n` +
+          `Stars: ${params.stars} | Default Branch: ${params.defaultBranch}\n` +
+          `Has Dockerfile: ${params.hasDockerfile}\n\n` +
+          `Requirements:\n` +
+          `- Start with a professional title and one-liner description\n` +
+          `- Include shield.io badges: build status, license, stars\n` +
+          `- Include this GitMind score badge on its own line: ${params.badgeUrl}\n` +
+          `- Features section (5-7 bullet points from summary)\n` +
+          `- Tech Stack section with icons where possible\n` +
+          `- Getting Started section with Prerequisites + Installation steps\n` +
+          `- Usage section with realistic code examples\n` +
+          `- If Dockerfile: include Docker usage section\n` +
+          `- Roadmap section (from provided roadmap)\n` +
+          `- Contributing section with standard fork/PR workflow\n` +
+          `- License section (MIT)\n` +
+          `- Footer: "Generated with ❤️ by [GitMind Pro](https://gitmindpro.vercel.app)"\n` +
+          `- Return ONLY raw Markdown content — no explanation, no fences around the whole doc`
+      }]
+    }
+  }, 'README generation');
+  return (response.text || '').trim();
+};
+
+// ─── Wave 12: Git Blame Intelligence ──────────────────────────────────────────
+
+export interface BlameInsight {
+  contributor: string;
+  riskConcentration: number; // 0-100
+  ownedAreas: string[];
+  finding: string;
+  busFactor: boolean;
+}
+
+export const analyzeBlameIntelligence = async (params: {
+  repoName: string;
+  contributors: { login: string; contributions: number }[];
+  recentCommits: { author: string; files: string[] }[];
+  findings: string[];
+}): Promise<BlameInsight[]> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const ownershipMap: Record<string, Set<string>> = {};
+  for (const c of params.recentCommits) {
+    if (!ownershipMap[c.author]) ownershipMap[c.author] = new Set();
+    c.files.forEach(f => ownershipMap[c.author].add(f));
+  }
+
+  const ownershipLines = Object.entries(ownershipMap)
+    .slice(0, 10)
+    .map(([author, files]) => `${author}: ${[...files].slice(0, 6).join(', ')}`)
+    .join('\n');
+
+  const totalContribs = params.contributors.reduce((s, c) => s + c.contributions, 0);
+  const contribLines = params.contributors.slice(0, 8)
+    .map(c => `${c.login}: ${c.contributions} commits (${Math.round((c.contributions / Math.max(totalContribs, 1)) * 100)}%)`)
+    .join('\n');
+
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are an engineering manager analyzing code ownership and risk concentration.\n` +
+          `Repository: ${params.repoName}\n\n` +
+          `Contributor Stats:\n${contribLines}\n\n` +
+          `File Ownership (recent commits):\n${ownershipLines}\n\n` +
+          `Known Risk Areas from Analysis:\n${params.findings.slice(0, 5).join('\n')}\n\n` +
+          `For each of the top 5 contributors, generate a blame intelligence entry:\n` +
+          `- contributor: their GitHub login\n` +
+          `- riskConcentration: 0-100 score (how much of the risk areas they own)\n` +
+          `- ownedAreas: list of file paths or modules they primarily own\n` +
+          `- finding: 1 sentence insight about their ownership pattern\n` +
+          `- busFactor: true if this person leaving would critically damage the project\n` +
+          `Return only contributors with meaningful ownership (>5% contribution). Max 5 entries.`
+      }]
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            contributor: { type: Type.STRING },
+            riskConcentration: { type: Type.NUMBER },
+            ownedAreas: { type: Type.ARRAY, items: { type: Type.STRING } },
+            finding: { type: Type.STRING },
+            busFactor: { type: Type.BOOLEAN },
+          },
+          required: ['contributor', 'riskConcentration', 'ownedAreas', 'finding', 'busFactor'],
+        }
+      }
+    }
+  }, 'blame intelligence');
+
+  return JSON.parse(response.text || '[]') as BlameInsight[];
+};

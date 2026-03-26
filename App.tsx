@@ -4,8 +4,8 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks } from './services/geminiService';
-import type { DepRisk } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence } from './services/geminiService';
+import type { DepRisk, BlameInsight } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
@@ -42,6 +42,8 @@ import PublicScorecardPage from './components/PublicScorecardPage';
 import WhatsNextPanel from './components/WhatsNextPanel';
 import PinnedInsight, { savePinnedInsight } from './components/PinnedInsight';
 import RepoLeaderboard from './components/RepoLeaderboard';
+import ReadmeGenerator from './components/ReadmeGenerator';
+import BlameIntelligence from './components/BlameIntelligence';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
 
@@ -373,6 +375,17 @@ const App: React.FC = () => {
   const [depRisks, setDepRisks] = useState<DepRisk[] | null>(null);
   const [depLoading, setDepLoading] = useState(false);
 
+  // Wave 12: README Generator state
+  const [generatedReadme, setGeneratedReadme] = useState<string | null>(null);
+  const [readmeLoading, setReadmeLoading] = useState(false);
+  const [readmeCommitting, setReadmeCommitting] = useState(false);
+  const [readmeCommitUrl, setReadmeCommitUrl] = useState<string | null>(null);
+  const [readmeCommitError, setReadmeCommitError] = useState<string | null>(null);
+
+  // Wave 12: Blame Intelligence state
+  const [blameInsights, setBlameInsights] = useState<BlameInsight[] | null>(null);
+  const [blameLoading, setBlameLoading] = useState(false);
+
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try { return JSON.parse(localStorage.getItem('gitmind.notifications') || '[]'); } catch { return []; }
@@ -622,6 +635,88 @@ const App: React.FC = () => {
     }
   }, [repo, analysis, structure, addNotification]);
 
+  // Wave 12: Generate README handler
+  const handleGenerateReadme = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setReadmeLoading(true);
+    setGeneratedReadme(null);
+    setReadmeCommitUrl(null);
+    setReadmeCommitError(null);
+    try {
+      const hasDockerfile = structure.some(f => f.name === 'Dockerfile' || f.path === 'Dockerfile');
+      const badgeUrl = `[![GitMind Score](https://gitmindpro.vercel.app/api/badge?owner=${repo.owner}&repo=${repo.repo})](https://gitmindpro.vercel.app)`;
+      const readme = await generateReadme({
+        repoName: repo.repo,
+        owner: repo.owner,
+        description: repo.description,
+        techStack: analysis.techStack,
+        summary: analysis.summary,
+        roadmap: analysis.roadmap ?? [],
+        stars: repo.stars,
+        defaultBranch: repo.defaultBranch,
+        hasDockerfile,
+        badgeUrl,
+      });
+      setGeneratedReadme(readme);
+    } catch (err) {
+      addNotification({ type: 'system', title: 'README Generation Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setReadmeLoading(false);
+    }
+  }, [repo, analysis, structure, addNotification]);
+
+  // Wave 12: Commit README to repo
+  const handleCommitReadme = useCallback(async (token?: string) => {
+    if (!repo || !generatedReadme) return;
+    setReadmeCommitting(true);
+    setReadmeCommitError(null);
+    try {
+      const url = await commitFileToRepo(
+        repo.owner,
+        repo.repo,
+        'README.md',
+        generatedReadme,
+        'docs: update README.md via GitMind Pro AI generator',
+        token
+      );
+      setReadmeCommitUrl(url);
+      addNotification({ type: 'analysis_complete', title: 'README Committed', message: `README.md committed to ${repo.owner}/${repo.repo}` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setReadmeCommitError(msg);
+    } finally {
+      setReadmeCommitting(false);
+    }
+  }, [repo, generatedReadme, addNotification]);
+
+  // Wave 12: Blame Intelligence handler
+  const handleAnalyzeBlame = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setBlameLoading(true);
+    setBlameInsights(null);
+    try {
+      const [recentCommitsRaw, contributorsRaw] = await Promise.all([
+        fetchRecentCommits(repo.owner, repo.repo, 30).catch(() => []),
+        fetchContributors(repo.owner, repo.repo).catch(() => []),
+      ]);
+      const recentCommits = (recentCommitsRaw as { commit?: { author?: { name?: string } }; author?: { login?: string }; files?: { filename: string }[] }[])
+        .map(c => ({
+          author: c.commit?.author?.name ?? c.author?.login ?? 'Unknown',
+          files: (c.files ?? []).map(f => f.filename),
+        }));
+      const insights = await analyzeBlameIntelligence({
+        repoName: `${repo.owner}/${repo.repo}`,
+        contributors: (contributorsRaw as { login: string; contributions: number }[]).slice(0, 10),
+        recentCommits,
+        findings: deepAudit?.vulnerabilities ?? [],
+      });
+      setBlameInsights(insights);
+    } catch (err) {
+      addNotification({ type: 'system', title: 'Blame Analysis Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setBlameLoading(false);
+    }
+  }, [repo, analysis, deepAudit, addNotification]);
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -1379,6 +1474,11 @@ const App: React.FC = () => {
     setCiCommitUrl(null);
     setShowCiTokenInput(false);
     setDepRisks(null);
+    // Wave 12: reset README & Blame Intelligence state
+    setGeneratedReadme(null);
+    setReadmeCommitUrl(null);
+    setReadmeCommitError(null);
+    setBlameInsights(null);
     addLog(`Fetching repository...`, 'info');
     
     try {
@@ -3953,6 +4053,62 @@ ${errorMessage}`);
                          )}
                        </div>
                      )}
+                   </div>
+
+                   {/* ── Wave 12: AI README Generator ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <FileText className="w-6 h-6 text-emerald-400" /> AI README Generator
+                         </h2>
+                         <p className="text-slate-400 text-sm">Generate a production-quality README.md tailored to this repo — with badges, examples, and a GitMind score embed.</p>
+                       </div>
+                       {!generatedReadme && !readmeLoading && (
+                         <button
+                           onClick={() => void handleGenerateReadme()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-emerald-500/20"
+                         >
+                           <Wand2 className="w-4 h-4" /> Generate README
+                         </button>
+                       )}
+                     </div>
+                     {readmeLoading && <Loader message="Crafting your README..." />}
+                     {generatedReadme && !readmeLoading && (
+                       <ReadmeGenerator
+                         readme={generatedReadme}
+                         onCommit={handleCommitReadme}
+                         committing={readmeCommitting}
+                         commitUrl={readmeCommitUrl}
+                         commitError={readmeCommitError}
+                       />
+                     )}
+                   </div>
+
+                   {/* ── Wave 12: Blame Intelligence ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <Users className="w-6 h-6 text-rose-400" /> Blame Intelligence
+                         </h2>
+                         <p className="text-slate-400 text-sm">Cross-reference code ownership with risk areas — see who owns each vulnerability. Essential for engineering managers.</p>
+                       </div>
+                       {(subscription?.plan === 'pro' || subscription?.plan === 'team') && !blameInsights && !blameLoading && (
+                         <button
+                           onClick={() => void handleAnalyzeBlame()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 rounded-xl text-sm font-bold text-white transition-all"
+                         >
+                           <GitBranch className="w-4 h-4" /> Analyze Ownership
+                         </button>
+                       )}
+                     </div>
+                     {blameLoading && <Loader message="Analyzing blame patterns..." />}
+                     <BlameIntelligence
+                       insights={blameInsights ?? []}
+                       isPro={subscription?.plan === 'pro' || subscription?.plan === 'team'}
+                       onUpgrade={() => setShowPricing(true)}
+                     />
                    </div>
                  </div>
                )}
