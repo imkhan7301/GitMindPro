@@ -1709,3 +1709,92 @@ export const scanCVEs = async (params: {
 
   return JSON.parse(response.text || '{}') as CVEReport;
 };
+
+// ─── Wave 15: AI Code Review Checklist Generator ─────────────
+
+export interface GeneratedChecklist {
+  repoName: string;
+  categories: {
+    name: string;
+    icon: string;
+    items: {
+      id: string;
+      label: string;
+      priority: 'critical' | 'important' | 'nice-to-have';
+      automated: boolean;
+    }[];
+  }[];
+  prTemplateMarkdown: string;
+  generatedAt: string;
+}
+
+export const generateReviewChecklist = async (params: {
+  repoName: string;
+  techStack: string[];
+  scorecard: { maintenance: number; documentation: number; innovation: number; security: number };
+  summary: string;
+  vulnerabilities: string[];
+}): Promise<GeneratedChecklist> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const prompt = `You are a senior engineering manager. Generate a comprehensive, repo-specific code review checklist for "${params.repoName}".
+
+Tech Stack: ${params.techStack.join(', ')}
+Score: Maintenance ${params.scorecard.maintenance}/10, Documentation ${params.scorecard.documentation}/10, Innovation ${params.scorecard.innovation}/10, Security ${params.scorecard.security}/10
+Summary: ${params.summary.slice(0, 500)}
+Known Vulnerabilities: ${params.vulnerabilities.slice(0, 5).join('; ') || 'None identified'}
+
+Create 4-6 categories with 3-5 items each. Focus on this repo's specific risks.
+Categories should use icons: "security", "bugs", "docs", "performance", "pr" 
+Items with "automated" true means they can be caught by CI/linters.
+Priority should be "critical" for security/data, "important" for bugs/quality, "nice-to-have" for style.
+Give each item a unique id like "sec-1", "bug-2", etc.
+
+Also generate a GitHub PR template in markdown that includes these checklist items as checkboxes.`;
+
+  const response = await generateContentWithFallback(ai, {
+    contents: { parts: [{ text: prompt }] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          categories: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                icon: { type: Type.STRING },
+                items: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      label: { type: Type.STRING },
+                      priority: { type: Type.STRING },
+                      automated: { type: Type.BOOLEAN },
+                    },
+                    required: ['id', 'label', 'priority', 'automated'],
+                  }
+                },
+              },
+              required: ['name', 'icon', 'items'],
+            }
+          },
+          prTemplateMarkdown: { type: Type.STRING },
+        },
+        required: ['categories', 'prTemplateMarkdown'],
+      }
+    }
+  }, 'review checklist generator');
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    repoName: params.repoName,
+    categories: parsed.categories || [],
+    prTemplateMarkdown: parsed.prTemplateMarkdown || '',
+    generatedAt: new Date().toISOString(),
+  };
+};

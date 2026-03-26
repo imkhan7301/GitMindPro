@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs } from './services/geminiService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -47,6 +47,11 @@ import BlameIntelligence from './components/BlameIntelligence';
 import PRReviewer from './components/PRReviewer';
 import TechDebtCalculator from './components/TechDebtCalculator';
 import CVEMonitor from './components/CVEMonitor';
+import HealthDashboard from './components/HealthDashboard';
+import CodeReviewChecklist from './components/CodeReviewChecklist';
+import type { ReviewChecklist } from './components/CodeReviewChecklist';
+import SmartAlerts from './components/SmartAlerts';
+import type { ScoreAlert } from './components/SmartAlerts';
 import { DEMO_REPO, DEMO_STRUCTURE, DEMO_ANALYSIS, DEMO_DEEP_AUDIT, DEMO_ONBOARDING, DEMO_INSIGHTS, DEMO_BLAME_INSIGHTS, DEMO_TECH_DEBT, DEMO_CVE_REPORT } from './utils/demoData';
 import { useTheme } from './hooks/useTheme';
 import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
@@ -337,7 +342,7 @@ const App: React.FC = () => {
   });
 
   // Dashboard tab state
-  const [dashboardTab, setDashboardTab] = useState<'home' | 'marketplace' | 'compare'>('home');
+  const [dashboardTab, setDashboardTab] = useState<'home' | 'marketplace' | 'compare' | 'health'>('home');
 
   // Onboarding wizard state
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('gitmind.onboarded'));
@@ -407,6 +412,19 @@ const App: React.FC = () => {
 
   // Wave 14: Interactive Demo Mode
   const [demoMode, setDemoMode] = useState(false);
+
+  // Wave 15: AI Code Review Checklist state
+  const [reviewChecklist, setReviewChecklist] = useState<ReviewChecklist | null>(null);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+
+  // Wave 15: Smart Alerts state (localStorage-persisted)
+  const [scoreAlerts, setScoreAlerts] = useState<ScoreAlert[]>(() => {
+    try { return JSON.parse(localStorage.getItem('gitmind.scoreAlerts') || '[]'); } catch { return []; }
+  });
+  const handleSaveAlerts = useCallback((alerts: ScoreAlert[]) => {
+    setScoreAlerts(alerts);
+    localStorage.setItem('gitmind.scoreAlerts', JSON.stringify(alerts));
+  }, []);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -862,6 +880,46 @@ const App: React.FC = () => {
     }
   }, [repo, analysis, addNotification]);
 
+
+
+  // Wave 15: Smart Alert evaluation — runs after each new analysis
+  const evaluateAlerts = useCallback((repoKey: string, scorecard: { maintenance: number; documentation: number; innovation: number; security: number }, previousScorecard?: { maintenance: number; documentation: number; innovation: number; security: number } | null) => {
+    if (scoreAlerts.length === 0) return;
+    const avg = (sc: typeof scorecard) => (sc.maintenance + sc.documentation + sc.innovation + sc.security) / 4;
+    const getScore = (sc: typeof scorecard, cat: string) => {
+      if (cat === 'overall') return avg(sc);
+      return sc[cat as keyof typeof sc] ?? avg(sc);
+    };
+
+    const triggered: ScoreAlert[] = [];
+    for (const alert of scoreAlerts) {
+      if (!alert.enabled) continue;
+      if (alert.repoPattern !== '*' && alert.repoPattern !== repoKey) continue;
+      const current = getScore(scorecard, alert.category);
+      if (alert.condition === 'below' && current < alert.threshold) triggered.push(alert);
+      else if (alert.condition === 'above' && current > alert.threshold) triggered.push(alert);
+      else if (alert.condition === 'drops_by' && previousScorecard) {
+        const prev = getScore(previousScorecard, alert.category);
+        if (prev - current >= alert.threshold) triggered.push(alert);
+      }
+    }
+
+    if (triggered.length > 0) {
+      const updated = scoreAlerts.map(a => {
+        const t = triggered.find(tr => tr.id === a.id);
+        return t ? { ...a, lastTriggered: new Date().toISOString() } : a;
+      });
+      handleSaveAlerts(updated);
+      for (const t of triggered) {
+        addNotification({
+          type: 'system',
+          title: `Alert: ${t.category} ${t.condition === 'below' ? 'below' : t.condition === 'above' ? 'above' : 'dropped by'} ${t.threshold}`,
+          message: `${repoKey} — ${t.category} score triggered your alert threshold.`,
+        });
+      }
+    }
+  }, [scoreAlerts, handleSaveAlerts, addNotification]);
+
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -898,6 +956,27 @@ const App: React.FC = () => {
   const addLog = useCallback((message: string, type: TerminalLog['type'] = 'info') => {
     setTerminalLogs(prev => [...prev, { id: Math.random().toString(36), timestamp: Date.now(), type, message }].slice(-50));
   }, []);
+
+  // Wave 15: Generate AI Code Review Checklist
+  const handleGenerateChecklist = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setChecklistLoading(true);
+    try {
+      const result = await generateReviewChecklist({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        scorecard: analysis.scorecard,
+        summary: analysis.summary,
+        vulnerabilities: deepAudit?.vulnerabilities || [],
+      });
+      setReviewChecklist(result);
+      addLog('AI checklist generated', 'success');
+    } catch (err) {
+      addLog(`Checklist generation failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    } finally {
+      setChecklistLoading(false);
+    }
+  }, [repo, analysis, deepAudit, addLog]);
 
   const handleGetFix = useCallback(async (findingKey: string, params: {
     file: string; title: string; rationale: string; recommendation: string;
@@ -1665,6 +1744,8 @@ const App: React.FC = () => {
     setAiPrPostUrl(null);
     setTechDebtReport(null);
     setCveReport(null);
+    // Wave 15: reset checklist state
+    setReviewChecklist(null);
     addLog(`Fetching repository...`, 'info');
     
     try {
@@ -1747,6 +1828,12 @@ const App: React.FC = () => {
 
       // Wave 10: Trigger What's Next panel
       setTimeout(() => setShowWhatsNext(true), 700);
+
+      // Wave 15: Evaluate smart alerts on new analysis
+      if (res.scorecard) {
+        const prevAnalysis = analysisHistory.find(a => a.repoOwner === parsed.owner && a.repoName === parsed.repo && a.scorecard);
+        evaluateAlerts(`${parsed.owner}/${parsed.repo}`, res.scorecard, prevAnalysis?.scorecard);
+      }
       
       // Increment free tier counter for non-authenticated users
       if (!authUser) {
@@ -4429,6 +4516,34 @@ ${errorMessage}`);
                        />
                      )}
                    </div>
+
+                   {/* ── Wave 15: AI Code Review Checklist ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <ClipboardCheck className="w-6 h-6 text-indigo-400" /> AI Code Review Checklist
+                         </h2>
+                         <p className="text-slate-400 text-sm">Auto-generated, repo-specific review checklist with exportable PR template for your team.</p>
+                       </div>
+                       {!reviewChecklist && !checklistLoading && (
+                         <button
+                           onClick={() => void handleGenerateChecklist()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white transition-all"
+                         >
+                           <ClipboardCheck className="w-4 h-4" /> Generate Checklist
+                         </button>
+                       )}
+                     </div>
+                     {checklistLoading && <Loader message="AI is generating your review checklist…" />}
+                     {reviewChecklist && !checklistLoading && (
+                       <CodeReviewChecklist
+                         checklist={reviewChecklist}
+                         loading={checklistLoading}
+                         onGenerate={handleGenerateChecklist}
+                       />
+                     )}
+                   </div>
                  </div>
                )}
 
@@ -4707,12 +4822,28 @@ ${errorMessage}`);
                   <BarChart3 className="w-3.5 h-3.5" /> Diff
                 </button>
               )}
+              <button onClick={() => setDashboardTab('health')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${dashboardTab === 'health' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
+                <Activity className="w-3.5 h-3.5" /> Health
+              </button>
             </div>
 
             {dashboardTab === 'marketplace' ? (
               <ExpertMarketplace authUser={authUser} />
             ) : dashboardTab === 'compare' ? (
               <CompareRepos />
+            ) : dashboardTab === 'health' ? (
+              <div className="space-y-8">
+                <HealthDashboard
+                  history={analysisHistory}
+                  watchedRepos={watchedRepos}
+                  onSelectRepo={(repoUrl) => { setUrl(repoUrl); setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100); }}
+                />
+                <SmartAlerts
+                  alerts={scoreAlerts}
+                  onSave={handleSaveAlerts}
+                  repoNames={[...new Set(analysisHistory.map(a => `${a.repoOwner}/${a.repoName}`))]}
+                />
+              </div>
             ) : (
             <>
 
