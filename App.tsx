@@ -5,7 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles } from './services/geminiService';
-import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
 import type { SubscriptionStatus } from './services/stripeService';
@@ -197,6 +197,9 @@ const App: React.FC = () => {
 
   // Usage tracking for authenticated users
   const [dailyUsage, setDailyUsage] = useState<{ used: number; limit: number } | null>(null);
+
+  // Watched repos (for scheduled analysis)
+  const [watchedRepos, setWatchedRepos] = useState<Set<string>>(new Set());
   
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -634,6 +637,9 @@ const App: React.FC = () => {
           setReferralCode(refCode);
           const refStats = await getReferralStats(user.id).catch(() => ({ count: 0, daysEarned: 0 }));
           setReferralStats(refStats);
+          // Load watched repos
+          const watched = await getWatchedRepos(user.id).catch(() => []);
+          setWatchedRepos(new Set(watched.map(w => `${w.repo_owner}/${w.repo_name}`)));
         }
       } catch (err) {
         addLog(`Auth session init failed: ${getErrorText(err)}`, 'error');
@@ -1871,25 +1877,25 @@ ${errorMessage}`);
         </div>
       )}
       <nav className="border-b border-slate-800 bg-[#020617]/95 backdrop-blur-2xl sticky top-0 z-50">
-        <div className="max-w-[1900px] mx-auto px-10 h-24 flex items-center justify-between">
+        <div className="max-w-[1900px] mx-auto px-4 sm:px-10 h-16 sm:h-24 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-6">
-            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-white shadow-2xl text-2xl neural-pulse cursor-pointer" onClick={() => window.location.reload()}>GM</div>
+            <div className="w-10 h-10 sm:w-14 sm:h-14 bg-indigo-600 rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-white shadow-2xl text-lg sm:text-2xl neural-pulse cursor-pointer flex-shrink-0" onClick={() => window.location.reload()}>GM</div>
             <div className="hidden lg:block">
                <span className="text-white font-extrabold tracking-tighter text-3xl block leading-none">GitMind<span className="text-indigo-500">PRO</span></span>
                <span className="text-[10px] text-slate-500 uppercase tracking-[0.5em] font-black mt-1">Onboard to Any Codebase in 5 Minutes</span>
             </div>
           </div>
           
-          <form onSubmit={handleImport} className="flex-grow max-w-xl mx-12 relative group">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-slate-500 transition-colors" />
-            <input className="w-full bg-slate-900 border border-slate-800 rounded-3xl pl-16 pr-20 py-5 text-lg text-white outline-none placeholder:text-slate-600 shadow-2xl" placeholder="Paste your company's GitHub repo URL..." value={url} onChange={(e) => setUrl(e.target.value)} />
+          <form onSubmit={handleImport} className="flex-grow max-w-xl mx-2 sm:mx-12 relative group min-w-0">
+            <Search className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-slate-500 transition-colors" />
+            <input className="w-full bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl pl-12 sm:pl-16 pr-12 sm:pr-20 py-3 sm:py-5 text-sm sm:text-lg text-white outline-none placeholder:text-slate-600 shadow-2xl" placeholder="Paste GitHub repo URL..." value={url} onChange={(e) => setUrl(e.target.value)} />
             <button type="button" onClick={() => { setCmdPaletteOpen(true); setCmdQuery(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-[10px] text-slate-500 hover:text-slate-400 transition-colors">
               <span className="font-mono">⌘K</span>
             </button>
           </form>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2">
               {!authEnabled && !authUser && (
                 <span className="px-3 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-400">
                   Auth not configured
@@ -2129,7 +2135,7 @@ ${errorMessage}`);
         </div>
       </nav>
 
-      <main className="max-w-[1900px] mx-auto p-12 pb-48">
+      <main className="max-w-[1900px] mx-auto p-4 sm:p-8 xl:p-12 pb-32 sm:pb-48">
         {loading ? (
           <div className="h-[80vh] flex flex-col items-center justify-center space-y-12 px-4">
             {/* Animated Brain Icon */}
@@ -2255,10 +2261,10 @@ ${errorMessage}`);
             </div>
           </div>
         ) : repo && analysis ? (
-          <div className="grid grid-cols-12 gap-12">
+          <div className="grid grid-cols-12 gap-4 sm:gap-6 xl:gap-12">
             
-            <div className="col-span-12 xl:col-span-3 space-y-10">
-               <div className="bg-slate-900/40 border border-slate-800 rounded-[2.5rem] p-10 backdrop-blur-3xl shadow-2xl relative overflow-hidden">
+            <div className="col-span-12 xl:col-span-3 space-y-6 sm:space-y-10">
+               <div className="bg-slate-900/40 border border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-10 backdrop-blur-3xl shadow-2xl relative overflow-hidden">
                   <h3 className="text-white font-black flex items-center gap-4 text-xl mb-10"><Layout className="w-6 h-6 text-indigo-400" /> File Explorer</h3>
                   <div className="max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
                     <FileTree nodes={structure} onSelectFile={handleFileSelect} selectedPath={selectedFile?.path} />
@@ -2266,7 +2272,7 @@ ${errorMessage}`);
                </div>
             </div>
 
-            <div className="col-span-12 xl:col-span-6 space-y-10">
+            <div className="col-span-12 xl:col-span-6 space-y-6 sm:space-y-10">
                <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl">
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -2277,8 +2283,8 @@ ${errorMessage}`);
                       { id: 'cloud', label: 'Tech Stack', icon: Server },
                       { id: 'audit', label: 'Security', icon: BrainCircuit }
                     ].map(tab => (
-                      <button key={tab.id} onClick={() => { setActiveTab(tab.id as AppTab); if (tab.id === 'insights' && !insights) fetchProjectInsights(); }} className={`flex items-center gap-2 px-6 py-3 rounded-[1.2rem] text-[9px] font-black uppercase tracking-[0.15em] transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-2xl' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'}`}>
-                        <tab.icon className="w-3.5 h-3.5" /> {tab.label}
+                      <button key={tab.id} onClick={() => { setActiveTab(tab.id as AppTab); if (tab.id === 'insights' && !insights) fetchProjectInsights(); }} className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-[1.2rem] text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.15em] transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-2xl' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'}`}>
+                        <tab.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">{tab.label}</span><span className="sm:hidden">{tab.label.split(' ')[0]}</span>
                       </button>
                     ))}
                   </div>
@@ -2294,6 +2300,30 @@ ${errorMessage}`);
                           }`}
                         >
                           <Share2 className="w-3.5 h-3.5" /> {isShared ? 'Shared' : 'Share'}
+                        </button>
+                      )}
+                      {authUser && repo && (
+                        <button
+                          onClick={async () => {
+                            const key = `${repo.owner}/${repo.repo}`;
+                            if (watchedRepos.has(key)) {
+                              await unwatchRepo(authUser.id, repo.owner, repo.repo).catch(() => {});
+                              setWatchedRepos(prev => { const next = new Set(prev); next.delete(key); return next; });
+                              addLog(`Unwatched ${key}`, 'info');
+                            } else {
+                              await watchRepo(authUser.id, repo.owner, repo.repo, activeWorkspaceId || null).catch(() => {});
+                              setWatchedRepos(prev => new Set(prev).add(key));
+                              addLog(`Watching ${key} — daily scheduled analysis enabled`, 'success');
+                              addNotification({ type: 'system', title: 'Repo Watched', message: `${key} will be analyzed daily. You'll get email digests weekly.` });
+                            }
+                          }}
+                          className={`px-4 py-2 font-black rounded-xl transition-all text-xs flex items-center gap-1.5 ${
+                            watchedRepos.has(`${repo.owner}/${repo.repo}`)
+                              ? 'bg-amber-500 hover:bg-amber-400 text-white'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5" /> {watchedRepos.has(`${repo.owner}/${repo.repo}`) ? 'Watching' : 'Watch'}
                         </button>
                       )}
                       {repo && (
@@ -3837,22 +3867,22 @@ ${errorMessage}`);
           </div>
         ) : (
           /* ───── PUBLIC LANDING PAGE ───── */
-          <div className="max-w-7xl mx-auto py-20 px-8">
+          <div className="max-w-7xl mx-auto py-10 sm:py-20 px-4 sm:px-8">
             {/* Hero Section */}
-            <div className="text-center mb-24">
+            <div className="text-center mb-12 sm:mb-24">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-full text-xs font-bold text-indigo-400 mb-8">
                 <Sparkles className="w-3.5 h-3.5" /> Powered by Google Gemini 2.0
               </div>
-              <h1 className="text-7xl md:text-[9rem] font-black text-white mb-8 tracking-tighter leading-[0.85] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
+              <h1 className="text-4xl sm:text-7xl md:text-[9rem] font-black text-white mb-6 sm:mb-8 tracking-tighter leading-[0.85] bg-gradient-to-b from-white to-white/40 bg-clip-text text-transparent">
                 Understand<br/>Any Codebase.
               </h1>
-              <p className="text-slate-400 text-xl md:text-2xl max-w-3xl mx-auto mb-10 font-medium leading-relaxed">
+              <p className="text-slate-400 text-base sm:text-xl md:text-2xl max-w-3xl mx-auto mb-8 sm:mb-10 font-medium leading-relaxed px-2">
                 Paste a GitHub URL. Get architecture, ownership, hot zones, security audit, and an AI onboarding guide — in under 2 minutes.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
                 <button
                   onClick={() => document.querySelector('input')?.focus()}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 px-14 rounded-3xl transition-all shadow-2xl shadow-indigo-500/40 text-lg"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 sm:py-5 px-8 sm:px-14 rounded-2xl sm:rounded-3xl transition-all shadow-2xl shadow-indigo-500/40 text-base sm:text-lg w-full sm:w-auto"
                 >
                   Analyze a Repo — Free
                 </button>
@@ -3861,7 +3891,7 @@ ${errorMessage}`);
                     setUrl('https://github.com/facebook/react');
                     setTimeout(() => document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true })), 100);
                   }}
-                  className="bg-slate-800 hover:bg-slate-700 text-white font-black py-5 px-14 rounded-3xl transition-all border border-slate-700 text-lg"
+                  className="bg-slate-800 hover:bg-slate-700 text-white font-black py-4 sm:py-5 px-8 sm:px-14 rounded-2xl sm:rounded-3xl transition-all border border-slate-700 text-base sm:text-lg w-full sm:w-auto"
                 >
                   Try Demo — React
                 </button>
@@ -3870,7 +3900,7 @@ ${errorMessage}`);
             </div>
 
             {/* Works With Bar */}
-            <div className="flex items-center justify-center gap-10 mb-24 opacity-40">
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-10 mb-12 sm:mb-24 opacity-40">
               <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
                 <Code className="w-4 h-4" /> GitHub
               </div>
@@ -3889,7 +3919,7 @@ ${errorMessage}`);
             </div>
 
             {/* Feature Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-24">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-12 sm:mb-24">
               {[
                 { icon: Rocket, title: 'Onboarding Guide', desc: 'Personalized learning path with critical files ranked by importance. New devs ship in days, not weeks.', badge: 'AI-generated' },
                 { icon: Layout, title: 'Architecture Blueprint', desc: 'Interactive graph showing how components connect. Understand data flow at a glance.', badge: 'Visual' },
@@ -3901,7 +3931,7 @@ ${errorMessage}`);
                 { icon: Share2, title: 'Share & Collaborate', desc: 'Share analysis results with your team via public links. Export to PDF or Markdown.', badge: 'Viral' },
                 { icon: Link, title: 'README Badge', desc: 'Add a GitMind score badge to your repo README. Show off your code quality.', badge: 'Free' },
               ].map((feature) => (
-                <div key={feature.title} className="group bg-slate-900/40 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/40 transition-all hover:-translate-y-1 duration-300">
+                <div key={feature.title} className="group bg-slate-900/40 border border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 hover:border-indigo-500/40 transition-all hover:-translate-y-1 duration-300">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-indigo-500/15 rounded-xl flex items-center justify-center group-hover:bg-indigo-500/25 transition-colors">
                       <feature.icon className="w-5 h-5 text-indigo-400" />
@@ -3915,12 +3945,12 @@ ${errorMessage}`);
             </div>
 
             {/* Pricing Preview */}
-            <div className="mb-24">
-              <div className="text-center mb-12">
-                <h2 className="text-4xl font-black text-white mb-4">Simple, Developer-Friendly Pricing</h2>
-                <p className="text-slate-400 text-lg">Start free. Upgrade when you need unlimited power.</p>
+            <div className="mb-12 sm:mb-24">
+              <div className="text-center mb-8 sm:mb-12">
+                <h2 className="text-2xl sm:text-4xl font-black text-white mb-4">Simple, Developer-Friendly Pricing</h2>
+                <p className="text-slate-400 text-sm sm:text-lg">Start free. Upgrade when you need unlimited power.</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto">
                 <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8">
                   <h3 className="text-lg font-black text-white mb-1">Free</h3>
                   <div className="text-3xl font-black text-white mb-4">$0</div>
@@ -3996,12 +4026,12 @@ ${errorMessage}`);
             </div>
 
             {/* Final CTA */}
-            <div className="text-center py-16 bg-gradient-to-b from-indigo-950/20 to-transparent rounded-3xl border border-indigo-500/10">
-              <h2 className="text-4xl md:text-5xl font-black text-white mb-6">Stop Wasting Time<br/>Reading Code Blindly</h2>
-              <p className="text-slate-400 text-lg mb-8 max-w-2xl mx-auto">Join developers who onboard to new codebases 10x faster with AI-powered analysis.</p>
+            <div className="text-center py-10 sm:py-16 px-4 bg-gradient-to-b from-indigo-950/20 to-transparent rounded-2xl sm:rounded-3xl border border-indigo-500/10">
+              <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-4 sm:mb-6">Stop Wasting Time<br/>Reading Code Blindly</h2>
+              <p className="text-slate-400 text-sm sm:text-lg mb-6 sm:mb-8 max-w-2xl mx-auto">Join developers who onboard to new codebases 10x faster with AI-powered analysis.</p>
               <button
                 onClick={() => document.querySelector('input')?.focus()}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 px-14 rounded-3xl transition-all shadow-2xl shadow-indigo-500/40 text-lg"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 sm:py-5 px-8 sm:px-14 rounded-2xl sm:rounded-3xl transition-all shadow-2xl shadow-indigo-500/40 text-base sm:text-lg w-full sm:w-auto"
               >
                 Analyze Your First Repo — Free
               </button>

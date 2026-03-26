@@ -883,3 +883,86 @@ export const respondToConsultation = async (consultationId: string, response: st
 
   if (error) throw new Error(`Failed to respond: ${error.message}`);
 };
+
+// ============================================================
+// Watched Repos (scheduled analysis)
+// ============================================================
+
+export const watchRepo = async (userId: string, repoOwner: string, repoName: string, organizationId?: string | null): Promise<void> => {
+  const supabase = getClient();
+  const { error } = await supabase
+    .from('watched_repos')
+    .upsert({
+      user_id: userId,
+      repo_owner: repoOwner,
+      repo_name: repoName,
+      organization_id: organizationId || null,
+      active: true,
+    }, { onConflict: 'user_id,repo_owner,repo_name' });
+  if (error) throw new Error(`Watch repo failed: ${error.message}`);
+};
+
+export const unwatchRepo = async (userId: string, repoOwner: string, repoName: string): Promise<void> => {
+  const supabase = getClient();
+  const { error } = await supabase
+    .from('watched_repos')
+    .delete()
+    .eq('user_id', userId)
+    .eq('repo_owner', repoOwner)
+    .eq('repo_name', repoName);
+  if (error) throw new Error(`Unwatch repo failed: ${error.message}`);
+};
+
+export interface WatchedRepo {
+  id: string;
+  repo_owner: string;
+  repo_name: string;
+  organization_id: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export const getWatchedRepos = async (userId: string): Promise<WatchedRepo[]> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('watched_repos')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`Fetch watched repos failed: ${error.message}`);
+  return (data || []) as WatchedRepo[];
+};
+
+// ============================================================
+// User Preferences
+// ============================================================
+
+export interface UserPreferences {
+  email_digest: boolean;
+  slack_notifications: boolean;
+  digest_frequency: 'daily' | 'weekly' | 'never';
+}
+
+export const getUserPreferences = async (userId: string): Promise<UserPreferences> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('user_preferences')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw new Error(`Fetch preferences failed: ${error.message}`);
+  return data || { email_digest: true, slack_notifications: true, digest_frequency: 'weekly' };
+};
+
+export const updateUserPreferences = async (userId: string, prefs: Partial<UserPreferences>): Promise<void> => {
+  const supabase = getClient();
+  const { error } = await supabase
+    .from('user_preferences')
+    .upsert({
+      user_id: userId,
+      ...prefs,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+  if (error) throw new Error(`Update preferences failed: ${error.message}`);
+};

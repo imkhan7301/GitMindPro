@@ -485,3 +485,88 @@ create policy if not exists "expert_reviews_select_all"
 create policy if not exists "expert_reviews_insert_own"
   on public.expert_reviews for insert
   with check (auth.uid() = reviewer_id);
+
+-- ============================================================
+-- Watched Repos (for scheduled cron analysis)
+-- ============================================================
+
+create table if not exists public.watched_repos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  organization_id uuid references public.organizations(id) on delete set null,
+  repo_owner text not null,
+  repo_name text not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (user_id, repo_owner, repo_name)
+);
+
+create index if not exists idx_watched_repos_user on public.watched_repos(user_id);
+create index if not exists idx_watched_repos_active on public.watched_repos(active) where active = true;
+
+alter table public.watched_repos enable row level security;
+
+create policy if not exists "watched_repos_select_own"
+  on public.watched_repos for select
+  using (auth.uid() = user_id);
+
+create policy if not exists "watched_repos_insert_own"
+  on public.watched_repos for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "watched_repos_update_own"
+  on public.watched_repos for update
+  using (auth.uid() = user_id);
+
+create policy if not exists "watched_repos_delete_own"
+  on public.watched_repos for delete
+  using (auth.uid() = user_id);
+
+-- ============================================================
+-- Digest Queue (for email digests)
+-- ============================================================
+
+create table if not exists public.digest_queue (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  repo_owner text not null,
+  repo_name text not null,
+  scorecard jsonb,
+  summary text,
+  sent boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_digest_queue_unsent on public.digest_queue(user_id, sent) where sent = false;
+
+alter table public.digest_queue enable row level security;
+
+create policy if not exists "digest_queue_select_own"
+  on public.digest_queue for select
+  using (auth.uid() = user_id);
+
+-- ============================================================
+-- User Preferences (email digest opt-in, notification settings)
+-- ============================================================
+
+create table if not exists public.user_preferences (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  email_digest boolean not null default true,
+  slack_notifications boolean not null default true,
+  digest_frequency text not null default 'weekly' check (digest_frequency in ('daily', 'weekly', 'never')),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_preferences enable row level security;
+
+create policy if not exists "user_preferences_select_own"
+  on public.user_preferences for select
+  using (auth.uid() = user_id);
+
+create policy if not exists "user_preferences_upsert_own"
+  on public.user_preferences for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "user_preferences_update_own"
+  on public.user_preferences for update
+  using (auth.uid() = user_id);
