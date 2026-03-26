@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
-import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles } from './services/githubService';
+import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
@@ -38,8 +38,10 @@ import ScheduledReports from './components/ScheduledReports';
 import CustomScoringWeights from './components/CustomScoringWeights';
 import type { ScoringWeights } from './components/CustomScoringWeights';
 import PublicScorecardPage from './components/PublicScorecardPage';
+import WhatsNextPanel from './components/WhatsNextPanel';
+import PinnedInsight, { savePinnedInsight } from './components/PinnedInsight';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2 } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -309,7 +311,7 @@ const App: React.FC = () => {
 
   // Last saved analysis ID + share token (for share/badge features)
   const [lastAnalysisId, setLastAnalysisId] = useState<string | null>(null);
-  const [, setLastShareToken] = useState<string | null>(null);
+  const [lastShareToken, setLastShareToken] = useState<string | null>(null);
   const [isShared, setIsShared] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralCopied, setReferralCopied] = useState(false);
@@ -343,6 +345,17 @@ const App: React.FC = () => {
   const [showScheduledReports, setShowScheduledReports] = useState(false);
   const [showScoringWeights, setShowScoringWeights] = useState(false);
   const [, setScoringWeights] = useState<ScoringWeights | null>(null);
+
+  // Wave 10: GitHub PR Comment Bot state
+  const [prCommentPosting, setPrCommentPosting] = useState(false);
+  const [prCommentPosted, setPrCommentPosted] = useState(false);
+  const [prCommentUrl, setPrCommentUrl] = useState<string | null>(null);
+  const [prCommentError, setPrCommentError] = useState<string | null>(null);
+  const [prCommentCustomToken, setPrCommentCustomToken] = useState('');
+  const [showPrTokenInput, setShowPrTokenInput] = useState(false);
+
+  // Wave 10: What's Next panel state
+  const [showWhatsNext, setShowWhatsNext] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -435,6 +448,70 @@ const App: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   }, [repo, analysis]);
+
+  // Wave 10: handler to post PR review as a GitHub comment
+  const handlePostPRComment = useCallback(async (customToken?: string) => {
+    if (!repo || !prReviewResult || !prReviewMeta) return;
+    setPrCommentPosting(true);
+    setPrCommentError(null);
+
+    const riskEmoji = prReviewResult.riskLevel === 'high' ? '🔴' : prReviewResult.riskLevel === 'medium' ? '🟡' : '🟢';
+    const topFindings = prReviewResult.findings.slice(0, 5);
+
+    const lines: string[] = [
+      `## 🔍 GitMind AI Code Review — ${prReviewMeta.title}`,
+      '',
+      `**Risk Level:** ${riskEmoji} ${prReviewResult.riskLevel.charAt(0).toUpperCase() + prReviewResult.riskLevel.slice(1)}  `,
+      `**Files Reviewed:** ${prReviewMeta.fileCount}`,
+      '',
+      '### Summary',
+      prReviewResult.summary,
+      '',
+    ];
+
+    if (prReviewResult.overallComments.length > 0) {
+      lines.push('### Key Points');
+      prReviewResult.overallComments.slice(0, 3).forEach(c => lines.push(`- ${c}`));
+      lines.push('');
+    }
+
+    if (topFindings.length > 0) {
+      lines.push('### Top Findings');
+      lines.push('| Severity | File | Issue |');
+      lines.push('|----------|------|-------|');
+      topFindings.forEach(f => {
+        const sev = f.severity;
+        const sevEmoji = sev === 'high' ? '🟠' : sev === 'medium' ? '🟡' : '🔵';
+        lines.push(`| ${sevEmoji} ${sev} | \`${f.file ?? '—'}\` | ${f.title} |`);
+      });
+      lines.push('');
+    }
+
+    lines.push('---');
+    lines.push('*Powered by [GitMind Pro](https://gitmindpro.vercel.app) — AI-powered code intelligence*');
+
+    try {
+      const url = await postPRComment(
+        repo.owner,
+        repo.repo,
+        prReviewMeta.number,
+        lines.join('\n'),
+        customToken
+      );
+      setPrCommentUrl(url);
+      setPrCommentPosted(true);
+      setShowPrTokenInput(false);
+      addNotification({ type: 'analysis_complete', title: 'Comment Posted', message: `GitMind review posted to PR #${prReviewMeta.number}` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      if (msg.includes('write access') || msg.includes('401') || msg.includes('403')) {
+        setShowPrTokenInput(true);
+      }
+      setPrCommentError(msg);
+    } finally {
+      setPrCommentPosting(false);
+    }
+  }, [repo, prReviewResult, prReviewMeta, addNotification]);
 
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
@@ -1250,6 +1327,28 @@ const App: React.FC = () => {
       addLog('✅ AI analysis completed', 'success');
       setAnalysis(res);
       addNotification({ type: 'analysis_complete', title: 'Analysis Complete', message: `${parsed.owner}/${parsed.repo} — AI analysis finished successfully` });
+
+      // Wave 10: Save pinned insight from lowest-scoring scorecard category
+      if (res.scorecard) {
+        const sc = res.scorecard;
+        const categories = [
+          { name: 'Security', score: sc.security, rationale: 'Security score is the most critical category for production readiness.' },
+          { name: 'Maintenance', score: sc.maintenance, rationale: 'Maintainability affects long-term velocity and developer experience.' },
+          { name: 'Documentation', score: sc.documentation, rationale: 'Documentation quality directly impacts onboarding and team productivity.' },
+          { name: 'Innovation', score: sc.innovation, rationale: 'Innovation score reflects adoption of modern best practices and tooling.' },
+        ];
+        const lowest = categories.sort((a, b) => a.score - b.score)[0];
+        savePinnedInsight({
+          repoFullName: `${parsed.owner}/${parsed.repo}`,
+          title: `${lowest.name} needs attention (${lowest.score}/10)`,
+          rationale: lowest.rationale,
+          severity: lowest.score <= 3 ? 'critical' : lowest.score <= 5 ? 'high' : lowest.score <= 7 ? 'medium' : 'low',
+          savedAt: new Date().toISOString(),
+        });
+      }
+
+      // Wave 10: Trigger What's Next panel
+      setTimeout(() => setShowWhatsNext(true), 700);
       
       // Increment free tier counter for non-authenticated users
       if (!authUser) {
@@ -1719,6 +1818,11 @@ ${errorMessage}`);
 
     setPrReviewLoading(true);
     setFixSnippets({});
+    // Wave 10: reset comment state for new review
+    setPrCommentPosted(false);
+    setPrCommentUrl(null);
+    setPrCommentError(null);
+    setShowPrTokenInput(false);
     addLog(`Loading PR #${prNumber} files...`, 'info');
 
     try {
@@ -3121,6 +3225,61 @@ ${errorMessage}`);
                              ))}
                            </ul>
                          )}
+
+                         {/* Wave 10: GitHub PR Comment Bot */}
+                         {prReviewMeta && repo && (
+                           <div className="border-t border-slate-800 pt-5 space-y-3">
+                             {prCommentPosted && prCommentUrl ? (
+                               <div className="flex items-center gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                                 <span className="text-emerald-300 text-xs font-bold flex-1">Review posted to GitHub!</span>
+                                 <a
+                                   href={prCommentUrl}
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   className="text-xs text-emerald-400 underline hover:no-underline shrink-0"
+                                 >
+                                   View comment →
+                                 </a>
+                               </div>
+                             ) : (
+                               <>
+                                 <button
+                                   onClick={() => void handlePostPRComment(prCommentCustomToken || undefined)}
+                                   disabled={prCommentPosting}
+                                   className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20"
+                                 >
+                                   <MessageSquare className="w-4 h-4" />
+                                   {prCommentPosting ? 'Posting…' : 'Post Review to GitHub'}
+                                 </button>
+                                 {prCommentError && (
+                                   <p className="text-xs text-rose-400 flex items-center gap-1">
+                                     <AlertTriangle className="w-3 h-3 shrink-0" />
+                                     {prCommentError}
+                                   </p>
+                                 )}
+                                 {showPrTokenInput && (
+                                   <div className="flex items-center gap-2 mt-2">
+                                     <input
+                                       type="password"
+                                       placeholder="Paste GitHub PAT with repo scope…"
+                                       value={prCommentCustomToken}
+                                       onChange={e => setPrCommentCustomToken(e.target.value)}
+                                       className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                                     />
+                                     <button
+                                       onClick={() => void handlePostPRComment(prCommentCustomToken)}
+                                       disabled={!prCommentCustomToken || prCommentPosting}
+                                       className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl text-xs font-bold text-white transition-all"
+                                     >
+                                       Post
+                                     </button>
+                                   </div>
+                                 )}
+                               </>
+                             )}
+                           </div>
+                         )}
                        </div>
 
                        {prReviewFiles.length > 0 && (
@@ -4019,6 +4178,19 @@ ${errorMessage}`);
               </div>
             )}
 
+            {/* Wave 10: Pinned Insight widget */}
+            <div className="mb-10">
+              <PinnedInsight
+                onReanalyze={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  setTimeout(() => {
+                    const form = document.querySelector('form');
+                    if (form) form.requestSubmit();
+                  }, 150);
+                }}
+              />
+            </div>
+
             {/* Score Trends */}
             {analysisHistory.length >= 2 && (
               <div className="mb-10">
@@ -4491,6 +4663,23 @@ ${errorMessage}`);
           currentScores={analysis?.scorecard || null}
           onClose={() => setShowScoringWeights(false)}
           onSave={(w) => setScoringWeights(w)}
+        />
+      )}
+
+      {/* Wave 10: What's Next panel — slides up after analysis */}
+      {showWhatsNext && (
+        <WhatsNextPanel
+          onClose={() => setShowWhatsNext(false)}
+          onWatchRepo={() => {
+            if (authUser && repo) {
+              void watchRepo(authUser.id, repo.owner, repo.repo, activeWorkspaceId || null)
+                .catch(() => { /* silent */ });
+              addNotification({ type: 'analysis_complete', title: 'Watching Repo', message: `Now watching ${repo.owner}/${repo.repo}` });
+            }
+          }}
+          onGoToPRTab={() => setActiveTab('pr-review' as AppTab)}
+          onShareScorecard={() => void handleShareAnalysis()}
+          hasShareToken={!!lastShareToken}
         />
       )}
 

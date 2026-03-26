@@ -321,3 +321,41 @@ export const fetchCodeOwnership = async (owner: string, repo: string) => {
   if (!response.ok) return [];
   return response.json();
 };
+
+/**
+ * Post a markdown comment to a GitHub Pull Request.
+ * Requires a token with `repo` write scope (not just read-only).
+ * Returns the URL of the created comment, or throws on error.
+ */
+export const postPRComment = async (
+  owner: string,
+  repo: string,
+  prNumber: number,
+  body: string,
+  customToken?: string
+): Promise<string> => {
+  const token = customToken ?? getGithubToken();
+  if (!token) throw new Error('GitHub token not configured');
+
+  const headers = new Headers();
+  headers.set('Accept', 'application/vnd.github+json');
+  headers.set('X-GitHub-Api-Version', '2022-11-28');
+  headers.set('Authorization', `Bearer ${token}`);
+  headers.set('Content-Type', 'application/json');
+
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    { method: 'POST', headers, body: JSON.stringify({ body }) }
+  );
+
+  if (response.status === 403 || response.status === 401) {
+    throw new Error('Token lacks write access. Please use a Personal Access Token (PAT) with repo scope.');
+  }
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `GitHub API error ${response.status}`);
+  }
+
+  const data = await response.json() as { html_url: string };
+  return data.html_url;
+};
