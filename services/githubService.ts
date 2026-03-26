@@ -359,3 +359,59 @@ export const postPRComment = async (
   const data = await response.json() as { html_url: string };
   return data.html_url;
 };
+
+/**
+ * Commit (create or update) a file in a GitHub repo via the Contents API.
+ * Requires a token with repo write scope.
+ * Returns the URL of the created/updated file on GitHub.
+ */
+export const commitFileToRepo = async (
+  owner: string,
+  repo: string,
+  path: string,
+  content: string,
+  commitMessage: string,
+  customToken?: string
+): Promise<string> => {
+  const token = customToken ?? getGithubToken();
+  if (!token) throw new Error('GitHub token not configured');
+
+  const headers = new Headers();
+  headers.set('Accept', 'application/vnd.github+json');
+  headers.set('X-GitHub-Api-Version', '2022-11-28');
+  headers.set('Authorization', `Bearer ${token}`);
+  headers.set('Content-Type', 'application/json');
+
+  // Check if file already exists (need its SHA for update)
+  let existingSha: string | undefined;
+  const checkRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+    { headers }
+  );
+  if (checkRes.ok) {
+    const existing = await checkRes.json() as { sha: string };
+    existingSha = existing.sha;
+  }
+
+  const body: Record<string, string> = {
+    message: commitMessage,
+    content: btoa(unescape(encodeURIComponent(content))), // UTF-8 safe base64
+  };
+  if (existingSha) body.sha = existingSha;
+
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+    { method: 'PUT', headers, body: JSON.stringify(body) }
+  );
+
+  if (response.status === 403 || response.status === 401) {
+    throw new Error('Token lacks write access. Please use a Personal Access Token (PAT) with repo scope.');
+  }
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `GitHub API error ${response.status}`);
+  }
+
+  const data = await response.json() as { content: { html_url: string } };
+  return data.content.html_url;
+};

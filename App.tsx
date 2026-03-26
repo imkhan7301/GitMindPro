@@ -3,8 +3,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 // jsPDF loaded dynamically on export to reduce initial bundle
 import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState, ConnectionLineType, useReactFlow, ReactFlowProvider, Node, Edge, OnNodesChange, OnEdgesChange } from 'reactflow';
-import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment } from './services/githubService';
-import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet } from './services/geminiService';
+import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
+import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks } from './services/geminiService';
+import type { DepRisk } from './services/geminiService';
 import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
@@ -40,8 +41,9 @@ import type { ScoringWeights } from './components/CustomScoringWeights';
 import PublicScorecardPage from './components/PublicScorecardPage';
 import WhatsNextPanel from './components/WhatsNextPanel';
 import PinnedInsight, { savePinnedInsight } from './components/PinnedInsight';
+import RepoLeaderboard from './components/RepoLeaderboard';
 import { useTheme } from './hooks/useTheme';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare } from 'lucide-react';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase, GitBranch, Twitter, Linkedin, Sun, Moon, Settings, RotateCw, Download, Sliders, Calendar, Wand2, MessageSquare, Cpu, ShieldCheck } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -244,6 +246,7 @@ const App: React.FC = () => {
   const [tourHasAutoPlayed, setTourHasAutoPlayed] = useState(false);
 
   const [terminalLogs, setTerminalLogs] = useState<TerminalLog[]>([]);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
   const exportAnalysisPdf = useCallback(async () => {
     if (!repo || !analysis) return;
@@ -356,6 +359,19 @@ const App: React.FC = () => {
 
   // Wave 10: What's Next panel state
   const [showWhatsNext, setShowWhatsNext] = useState(false);
+
+  // Wave 11: CI Workflow Generator state
+  const [ciWorkflow, setCiWorkflow] = useState<string | null>(null);
+  const [ciLoading, setCiLoading] = useState(false);
+  const [ciCommitting, setCiCommitting] = useState(false);
+  const [ciCommitUrl, setCiCommitUrl] = useState<string | null>(null);
+  const [ciCommitToken, setCiCommitToken] = useState('');
+  const [showCiTokenInput, setShowCiTokenInput] = useState(false);
+  const [ciCopied, setCiCopied] = useState(false);
+
+  // Wave 11: Dependency Risk Scanner state
+  const [depRisks, setDepRisks] = useState<DepRisk[] | null>(null);
+  const [depLoading, setDepLoading] = useState(false);
 
   // Notifications state (localStorage-backed)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
@@ -513,7 +529,98 @@ const App: React.FC = () => {
     }
   }, [repo, prReviewResult, prReviewMeta, addNotification]);
 
-  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  // Wave 11: Generate CI workflow from current repo's tech stack
+  const handleGenerateCIWorkflow = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setCiLoading(true);
+    setCiWorkflow(null);
+    setCiCommitUrl(null);
+    setShowCiTokenInput(false);
+    try {
+      const hasDockerfile = structure.some(f => f.path === 'Dockerfile' || f.path === 'docker-compose.yml');
+      const hasTests = structure.some(f =>
+        f.path?.includes('test') || f.path?.includes('spec') || f.path?.includes('__tests__')
+      );
+      const yaml = await generateCIWorkflow({
+        repoName: `${repo.owner}/${repo.repo}`,
+        techStack: analysis.techStack,
+        hasDockerfile,
+        hasTests,
+        defaultBranch: repo.defaultBranch || 'main',
+      });
+      setCiWorkflow(yaml);
+    } catch (err) {
+      addNotification({ type: 'system', title: 'CI Generation Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setCiLoading(false);
+    }
+  }, [repo, analysis, structure, addNotification]);
+
+  // Wave 11: Commit generated CI workflow to the repo
+  const handleCommitCIWorkflow = useCallback(async (token?: string) => {
+    if (!repo || !ciWorkflow) return;
+    setCiCommitting(true);
+    try {
+      const url = await commitFileToRepo(
+        repo.owner,
+        repo.repo,
+        '.github/workflows/ci.yml',
+        ciWorkflow,
+        'ci: add GitHub Actions CI workflow generated by GitMind Pro',
+        token
+      );
+      setCiCommitUrl(url);
+      setShowCiTokenInput(false);
+      addNotification({ type: 'analysis_complete', title: 'CI Workflow Committed', message: `.github/workflows/ci.yml added to ${repo.owner}/${repo.repo}` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      if (msg.includes('write access') || msg.includes('401') || msg.includes('403')) {
+        setShowCiTokenInput(true);
+      }
+      addNotification({ type: 'system', title: 'Commit Failed', message: msg });
+    } finally {
+      setCiCommitting(false);
+    }
+  }, [repo, ciWorkflow, addNotification]);
+
+  // Wave 11: Scan dependencies for risks
+  const handleScanDependencies = useCallback(async () => {
+    if (!repo || !analysis) return;
+    setDepLoading(true);
+    setDepRisks(null);
+    try {
+      // Try to fetch package.json — most common manifest
+      const manifests = ['package.json', 'requirements.txt', 'Cargo.toml', 'go.mod'];
+      let rawContent: string | null = null;
+      let foundManifest = '';
+      for (const manifest of manifests) {
+        if (structure.some(f => f.path === manifest || f.name === manifest)) {
+          try {
+            rawContent = await fetchFileContent(repo.owner, repo.repo, manifest);
+            foundManifest = manifest;
+            break;
+          } catch { /* try next */ }
+        }
+      }
+      if (!rawContent || foundManifest !== 'package.json') {
+        // If no package.json, use AI with tech stack context only
+        const risks = await analyzeDependencyRisks({ dependencies: {}, devDependencies: {}, techStack: analysis.techStack });
+        setDepRisks(risks);
+        return;
+      }
+      const pkg = JSON.parse(rawContent) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+      const risks = await analyzeDependencyRisks({
+        dependencies: pkg.dependencies ?? {},
+        devDependencies: pkg.devDependencies ?? {},
+        techStack: analysis.techStack,
+      });
+      setDepRisks(risks);
+    } catch (err) {
+      addNotification({ type: 'system', title: 'Dep Scan Failed', message: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setDepLoading(false);
+    }
+  }, [repo, analysis, structure, addNotification]);
 
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -1267,6 +1374,11 @@ const App: React.FC = () => {
     setRepo(null); 
     setAnalysis(null); 
     setOnboardingGuide(null);
+    // Wave 11: reset DevOps tab state on new analysis
+    setCiWorkflow(null);
+    setCiCommitUrl(null);
+    setShowCiTokenInput(false);
+    setDepRisks(null);
     addLog(`Fetching repository...`, 'info');
     
     try {
@@ -2486,7 +2598,8 @@ ${errorMessage}`);
                       { id: 'insights', label: 'Team & Issues', icon: Users },
                       { id: 'pr-review', label: 'PR Review', icon: ClipboardCheck },
                       { id: 'cloud', label: 'Tech Stack', icon: Server },
-                      { id: 'audit', label: 'Security', icon: BrainCircuit }
+                      { id: 'audit', label: 'Security', icon: BrainCircuit },
+                      { id: 'devops', label: 'DevOps', icon: Cpu },
                     ].map(tab => (
                       <button key={tab.id} onClick={() => { setActiveTab(tab.id as AppTab); if (tab.id === 'insights' && !insights) fetchProjectInsights(); }} className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-[1.2rem] text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.15em] transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-2xl' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'}`}>
                         <tab.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">{tab.label}</span><span className="sm:hidden">{tab.label.split(' ')[0]}</span>
@@ -3683,6 +3796,167 @@ ${errorMessage}`);
                  </div>
                )}
 
+               {/* Wave 11: DevOps Tab — CI Generator + Dep Scanner */}
+               {activeTab === 'devops' && (
+                 <div className="space-y-8 animate-in zoom-in-95 duration-500">
+                   {/* ── CI Workflow Generator ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <Cpu className="w-6 h-6 text-indigo-400" /> CI Workflow Generator
+                         </h2>
+                         <p className="text-slate-400 text-sm">Auto-generate a production-ready <code className="text-indigo-400 text-xs bg-indigo-500/10 px-1.5 py-0.5 rounded">.github/workflows/ci.yml</code> tailored to this repo&apos;s tech stack.</p>
+                       </div>
+                       {!ciWorkflow && !ciLoading && (
+                         <button
+                           onClick={() => void handleGenerateCIWorkflow()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-indigo-500/20"
+                         >
+                           <Zap className="w-4 h-4" /> Generate
+                         </button>
+                       )}
+                     </div>
+
+                     {ciLoading && <Loader message="Generating CI workflow with AI…" />}
+
+                     {ciWorkflow && !ciLoading && (
+                       <div className="space-y-4">
+                         <div className="relative">
+                           <pre className="p-6 bg-slate-950 border border-slate-800 rounded-2xl overflow-x-auto text-xs text-emerald-300 leading-relaxed max-h-[500px] overflow-y-auto custom-scrollbar">
+                             <code>{ciWorkflow}</code>
+                           </pre>
+                           <button
+                             onClick={() => {
+                               void navigator.clipboard.writeText(ciWorkflow);
+                               setCiCopied(true);
+                               setTimeout(() => setCiCopied(false), 2000);
+                             }}
+                             className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all"
+                           >
+                             {ciCopied ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                             {ciCopied ? 'Copied!' : 'Copy'}
+                           </button>
+                         </div>
+                         <div className="flex flex-wrap items-center gap-3">
+                           {ciCommitUrl ? (
+                             <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                               <span className="text-emerald-300 text-xs font-bold">Committed!</span>
+                               <a href={ciCommitUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-400 underline hover:no-underline">View on GitHub →</a>
+                             </div>
+                           ) : (
+                             <>
+                               <button
+                                 onClick={() => void handleCommitCIWorkflow(ciCommitToken || undefined)}
+                                 disabled={ciCommitting}
+                                 className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl text-sm font-bold text-white transition-all"
+                               >
+                                 <GitBranch className="w-4 h-4" /> {ciCommitting ? 'Committing…' : 'Commit to Repo'}
+                               </button>
+                               <button
+                                 onClick={() => void handleGenerateCIWorkflow()}
+                                 disabled={ciLoading}
+                                 className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all"
+                               >
+                                 <RotateCw className="w-3.5 h-3.5" /> Regenerate
+                               </button>
+                             </>
+                           )}
+                         </div>
+                         {showCiTokenInput && (
+                           <div className="flex items-center gap-2 mt-1">
+                             <input
+                               type="password"
+                               placeholder="Paste GitHub PAT with repo scope…"
+                               value={ciCommitToken}
+                               onChange={e => setCiCommitToken(e.target.value)}
+                               className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                             />
+                             <button
+                               onClick={() => void handleCommitCIWorkflow(ciCommitToken)}
+                               disabled={!ciCommitToken || ciCommitting}
+                               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl text-xs font-bold text-white transition-all"
+                             >
+                               Commit
+                             </button>
+                           </div>
+                         )}
+                       </div>
+                     )}
+                   </div>
+
+                   {/* ── Dependency Risk Scanner ── */}
+                   <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl">
+                     <div className="flex items-start justify-between gap-4 mb-6">
+                       <div>
+                         <h2 className="text-2xl font-black text-white flex items-center gap-3 mb-1">
+                           <ShieldCheck className="w-6 h-6 text-amber-400" /> Dependency Risk Scanner
+                         </h2>
+                         <p className="text-slate-400 text-sm">AI-powered audit of your dependencies — outdated versions, known vulnerabilities, deprecated packages.</p>
+                       </div>
+                       {!depRisks && !depLoading && (
+                         <button
+                           onClick={() => void handleScanDependencies()}
+                           className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-amber-500/20"
+                         >
+                           <Shield className="w-4 h-4" /> Scan Deps
+                         </button>
+                       )}
+                     </div>
+
+                     {depLoading && <Loader message="Scanning dependencies for risks…" />}
+
+                     {depRisks && !depLoading && (
+                       <div className="space-y-4">
+                         {depRisks.length === 0 ? (
+                           <div className="flex items-center gap-3 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl">
+                             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                             <div>
+                               <p className="text-emerald-300 font-bold text-sm">No high-risk dependencies found</p>
+                               <p className="text-slate-400 text-xs mt-0.5">Dependencies look healthy based on your current versions.</p>
+                             </div>
+                           </div>
+                         ) : (
+                           <>
+                             <div className="flex items-center gap-3 mb-2">
+                               <span className="text-sm text-slate-400">{depRisks.length} risk{depRisks.length !== 1 ? 's' : ''} found</span>
+                               <button
+                                 onClick={() => void handleScanDependencies()}
+                                 className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                               >
+                                 <RotateCw className="w-3 h-3" /> Rescan
+                               </button>
+                             </div>
+                             <div className="space-y-3">
+                               {depRisks.sort((a, b) => {
+                                 const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+                                 return (order[a.risk] ?? 3) - (order[b.risk] ?? 3);
+                               }).map((dep) => (
+                                 <div key={dep.name} className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-2">
+                                   <div className="flex items-center gap-3 flex-wrap">
+                                     <span className="font-mono text-sm font-bold text-white">{dep.name}</span>
+                                     <span className="font-mono text-xs text-slate-500">{dep.currentVersion}</span>
+                                     <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase border ${
+                                       dep.risk === 'critical' ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                       : dep.risk === 'high' ? 'bg-orange-500/15 text-orange-300 border-orange-500/30'
+                                       : dep.risk === 'medium' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                       : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                     }`}>{dep.risk}</span>
+                                   </div>
+                                   <p className="text-slate-400 text-xs leading-relaxed">{dep.reason}</p>
+                                   <p className="text-indigo-400 text-xs font-semibold">→ {dep.recommendation}</p>
+                                 </div>
+                               ))}
+                             </div>
+                           </>
+                         )}
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               )}
+
                {activeTab === 'cloud' && (
                  <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl animate-in zoom-in-95 duration-500">
                     <h2 className="text-3xl font-black text-white tracking-tighter mb-8 flex items-center gap-4">
@@ -4190,6 +4464,23 @@ ${errorMessage}`);
                 }}
               />
             </div>
+
+            {/* Wave 11: Team Repo Leaderboard */}
+            {analysisHistory.length >= 2 && (
+              <div className="mb-10">
+                <RepoLeaderboard
+                  analyses={analysisHistory}
+                  onSelectRepo={(repoUrl) => {
+                    setUrl(repoUrl);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    setTimeout(() => {
+                      const form = document.querySelector('form');
+                      if (form) form.requestSubmit();
+                    }, 150);
+                  }}
+                />
+              </div>
+            )}
 
             {/* Score Trends */}
             {analysisHistory.length >= 2 && (

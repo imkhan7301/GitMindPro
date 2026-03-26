@@ -289,7 +289,7 @@ export interface TestingInfo {
   coverage?: number;
 }
 
-export type AppTab = 'intelligence' | 'blueprint' | 'lab' | 'cloud' | 'market' | 'vision' | 'audit' | 'insights' | 'onboarding' | 'pr-review';
+export type AppTab = 'intelligence' | 'blueprint' | 'lab' | 'cloud' | 'market' | 'vision' | 'audit' | 'insights' | 'onboarding' | 'pr-review' | 'devops';
 
 export interface SavedAnalysis {
   id: string;

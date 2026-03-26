@@ -1208,3 +1208,96 @@ export const generateFixSnippet = async (params: {
 
   return JSON.parse(response.text || '{}') as { explanation: string; code: string; language: string };
 };
+
+// ─── Wave 11: CI Workflow Generator ───────────────────────────────────────────
+
+export const generateCIWorkflow = async (params: {
+  repoName: string;
+  techStack: string[];
+  hasDockerfile: boolean;
+  hasTests: boolean;
+  defaultBranch: string;
+}): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a DevOps expert. Generate a production-ready GitHub Actions CI/CD workflow YAML file.\n` +
+          `Repository: ${params.repoName}\n` +
+          `Tech stack: ${params.techStack.join(', ')}\n` +
+          `Has Dockerfile: ${params.hasDockerfile}\n` +
+          `Has test suite: ${params.hasTests}\n` +
+          `Default branch: ${params.defaultBranch}\n\n` +
+          `Requirements:\n` +
+          `- Use accurate job names and steps for the detected tech stack\n` +
+          `- Include: checkout, dependency install, lint (if applicable), test, build\n` +
+          `- If Dockerfile present, add a Docker build step\n` +
+          `- Use correct package manager (npm/yarn/pnpm for Node; pip/poetry for Python; cargo for Rust; etc.)\n` +
+          `- Trigger on push to ${params.defaultBranch} and pull_request\n` +
+          `- Use latest stable action versions (actions/checkout@v4, actions/setup-node@v4, etc.)\n` +
+          `- Add caching for dependencies\n` +
+          `- Return ONLY the raw YAML content starting with "name:" — no markdown fences, no explanation`
+      }]
+    }
+  }, 'CI workflow');
+  return (response.text || '').trim();
+};
+
+// ─── Wave 11: Dependency Risk Analyzer ────────────────────────────────────────
+
+export interface DepRisk {
+  name: string;
+  currentVersion: string;
+  risk: 'critical' | 'high' | 'medium' | 'low';
+  reason: string;
+  recommendation: string;
+}
+
+export const analyzeDependencyRisks = async (params: {
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+  techStack: string[];
+}): Promise<DepRisk[]> => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const allDeps = { ...params.dependencies, ...params.devDependencies };
+  const depList = Object.entries(allDeps).map(([name, ver]) => `${name}@${ver}`).join('\n');
+
+  const response = await generateContentWithFallback(ai, {
+    contents: {
+      parts: [{
+        text:
+          `You are a security and dependency expert. Analyze these npm dependencies for risks.\n` +
+          `Tech stack context: ${params.techStack.join(', ')}\n\n` +
+          `Dependencies:\n${depList}\n\n` +
+          `Identify up to 8 dependency risks. Consider:\n` +
+          `- Severely outdated packages (major version behind)\n` +
+          `- Known vulnerable packages (e.g. lodash <4.17.21, axios <1.6.0, etc.)\n` +
+          `- Deprecated packages with better alternatives\n` +
+          `- Packages with known security advisories\n` +
+          `- Dev dependencies accidentally used in prod\n\n` +
+          `Return a JSON array of risk objects. Focus only on genuinely risky packages.\n` +
+          `Return: [{ "name": "pkg-name", "currentVersion": "x.x.x", "risk": "critical|high|medium|low", "reason": "...", "recommendation": "..." }]`
+      }]
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            currentVersion: { type: Type.STRING },
+            risk: { type: Type.STRING },
+            reason: { type: Type.STRING },
+            recommendation: { type: Type.STRING },
+          },
+          required: ['name', 'currentVersion', 'risk', 'reason', 'recommendation'],
+        }
+      }
+    }
+  }, 'dependency risks');
+
+  return JSON.parse(response.text || '[]') as DepRisk[];
+};
