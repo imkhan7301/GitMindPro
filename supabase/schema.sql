@@ -379,3 +379,109 @@ create policy if not exists "referrals_select_own"
 create policy if not exists "referrals_insert_own"
   on public.referrals for insert
   with check (auth.uid() = referrer_id);
+
+-- ═══════════════════════════════════════════════════════════════════
+-- Expert Marketplace
+-- ═══════════════════════════════════════════════════════════════════
+
+create table if not exists public.expert_profiles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references public.profiles(id) on delete cascade,
+  headline text not null default '',
+  bio text not null default '',
+  skills text[] not null default '{}',
+  hourly_rate integer not null default 0,          -- USD cents
+  currency text not null default 'USD',
+  availability text not null check (availability in ('available', 'busy', 'unavailable')) default 'available',
+  years_experience integer not null default 0,
+  github_url text,
+  linkedin_url text,
+  website_url text,
+  portfolio_repos text[] not null default '{}',    -- GitHub URLs of showcase repos
+  total_reviews integer not null default 0,
+  avg_rating numeric(2,1) not null default 0.0,
+  is_featured boolean not null default false,
+  is_visible boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_expert_profiles_user on public.expert_profiles(user_id);
+create index if not exists idx_expert_profiles_visible on public.expert_profiles(is_visible, avg_rating desc) where is_visible = true;
+create index if not exists idx_expert_profiles_skills on public.expert_profiles using gin(skills);
+
+create table if not exists public.consultation_requests (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references public.profiles(id) on delete cascade,
+  expert_id uuid not null references public.expert_profiles(id) on delete cascade,
+  repo_url text,
+  analysis_id bigint references public.analyses(id) on delete set null,
+  service_type text not null check (service_type in ('code_review', 'security_audit', 'architecture', 'onboarding', 'mentoring', 'other')),
+  message text not null,
+  budget_cents integer,                             -- proposed budget in cents
+  status text not null check (status in ('pending', 'accepted', 'declined', 'completed', 'canceled')) default 'pending',
+  expert_response text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_consultation_requester on public.consultation_requests(requester_id, created_at desc);
+create index if not exists idx_consultation_expert on public.consultation_requests(expert_id, created_at desc);
+
+create table if not exists public.expert_reviews (
+  id uuid primary key default gen_random_uuid(),
+  consultation_id uuid not null references public.consultation_requests(id) on delete cascade,
+  reviewer_id uuid not null references public.profiles(id) on delete cascade,
+  expert_id uuid not null references public.expert_profiles(id) on delete cascade,
+  rating integer not null check (rating between 1 and 5),
+  comment text,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_expert_reviews_unique on public.expert_reviews(consultation_id, reviewer_id);
+create index if not exists idx_expert_reviews_expert on public.expert_reviews(expert_id, created_at desc);
+
+alter table public.expert_profiles enable row level security;
+alter table public.consultation_requests enable row level security;
+alter table public.expert_reviews enable row level security;
+
+-- Expert profiles: visible to all authenticated users, editable by owner
+create policy if not exists "expert_profiles_select_all"
+  on public.expert_profiles for select
+  using (is_visible = true or auth.uid() = user_id);
+
+create policy if not exists "expert_profiles_insert_own"
+  on public.expert_profiles for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "expert_profiles_update_own"
+  on public.expert_profiles for update
+  using (auth.uid() = user_id);
+
+-- Consultation requests: viewable by requester or expert
+create policy if not exists "consultations_select_own"
+  on public.consultation_requests for select
+  using (
+    auth.uid() = requester_id
+    or exists (select 1 from public.expert_profiles ep where ep.id = expert_id and ep.user_id = auth.uid())
+  );
+
+create policy if not exists "consultations_insert_own"
+  on public.consultation_requests for insert
+  with check (auth.uid() = requester_id);
+
+create policy if not exists "consultations_update_participant"
+  on public.consultation_requests for update
+  using (
+    auth.uid() = requester_id
+    or exists (select 1 from public.expert_profiles ep where ep.id = expert_id and ep.user_id = auth.uid())
+  );
+
+-- Reviews: viewable by all, writeable by consultation requester
+create policy if not exists "expert_reviews_select_all"
+  on public.expert_reviews for select
+  using (true);
+
+create policy if not exists "expert_reviews_insert_own"
+  on public.expert_reviews for insert
+  with check (auth.uid() = reviewer_id);

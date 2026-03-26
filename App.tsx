@@ -15,7 +15,8 @@ import Loader from './components/Loader';
 import ScoreCard from './components/ScoreCard';
 import AnalysisHistory from './components/AnalysisHistory';
 import PricingModal from './components/PricingModal';
-import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus } from 'lucide-react';
+import ExpertMarketplace from './components/ExpertMarketplace';
+import { Search, Code, Layout, TrendingUp, Shield, Send, Activity, Cloud, Zap, FlaskConical, Sparkles, Terminal, Rocket, Server, ChevronUp, ChevronDown, Video, MapPin, Users, BrainCircuit, AlertTriangle, GitPullRequest, Bug, Package, LogIn, LogOut, ClipboardCheck, CreditCard, X, Share2, Link, FileText, BarChart3, Clock, ArrowRight, Gift, Copy, CheckCircle2, Plus, Briefcase } from 'lucide-react';
 
 type AiStudioBridge = {
   hasSelectedApiKey: () => Promise<boolean>;
@@ -288,6 +289,10 @@ const App: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('gitmind.favorites') || '[]'); } catch { return []; }
   });
+
+  // Dashboard tab state
+  const [dashboardTab, setDashboardTab] = useState<'home' | 'marketplace'>('home');
+  const [showExpertHire, setShowExpertHire] = useState(false);
 
   const exportAnalysisMarkdown = useCallback(() => {
     if (!repo || !analysis) return;
@@ -2224,6 +2229,12 @@ ${errorMessage}`);
                       <button onClick={exportAnalysisPdf} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black rounded-xl transition-all text-xs">
                         Export to PDF
                       </button>
+                      <button
+                        onClick={() => { setShowExpertHire(true); }}
+                        className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-xl transition-all text-xs flex items-center gap-1.5"
+                      >
+                        <Briefcase className="w-3.5 h-3.5" /> Hire Expert
+                      </button>
                     </div>
                   )}
                </div>
@@ -3464,7 +3475,7 @@ ${errorMessage}`);
           /* ───── AUTHENTICATED DASHBOARD ───── */
           <div className="max-w-7xl mx-auto py-12 px-8">
             {/* Welcome Header */}
-            <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-3xl font-black text-white mb-1">Welcome back{authUser.user_metadata?.user_name ? `, ${authUser.user_metadata.user_name}` : ''}</h1>
                 <p className="text-slate-500 text-sm">Your AI-powered code intelligence hub</p>
@@ -3475,6 +3486,21 @@ ${errorMessage}`);
                 </button>
               </div>
             </div>
+
+            {/* Dashboard Tabs */}
+            <div className="flex items-center gap-1 mb-10 bg-slate-900/40 border border-slate-800 rounded-xl p-1 w-fit">
+              <button onClick={() => setDashboardTab('home')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${dashboardTab === 'home' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
+                Home
+              </button>
+              <button onClick={() => setDashboardTab('marketplace')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${dashboardTab === 'marketplace' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
+                <Briefcase className="w-3.5 h-3.5" /> Expert Marketplace
+              </button>
+            </div>
+
+            {dashboardTab === 'marketplace' ? (
+              <ExpertMarketplace authUser={authUser} />
+            ) : (
+            <>
 
             {/* Quick Stats Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
@@ -3675,6 +3701,8 @@ ${errorMessage}`);
                   Analyze Your First Repo
                 </button>
               </div>
+            )}
+            </>
             )}
           </div>
         ) : (
@@ -3978,6 +4006,20 @@ ${errorMessage}`);
             await openBillingPortal(authUser.id);
           }}
         />
+      )}
+
+      {/* Expert Hire Modal */}
+      {showExpertHire && authUser && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <ExpertMarketplace
+              authUser={authUser}
+              repoUrl={repo?.url || undefined}
+              analysisId={lastAnalysisId || undefined}
+              onClose={() => setShowExpertHire(false)}
+            />
+          </div>
+        </div>
       )}
 
       <div className={`fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 transition-all duration-500 z-[100] ${isTerminalOpen ? 'h-[400px]' : 'h-14'}`}>

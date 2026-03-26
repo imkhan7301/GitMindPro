@@ -312,3 +312,51 @@ export interface SavedPRReview {
   riskLevel: 'low' | 'medium' | 'high';
   createdAt: string;
 }
+
+// ─── Expert Marketplace Types ───────────────────────────────────
+
+export interface ExpertProfile {
+  id: string;
+  userId: string;
+  headline: string;
+  bio: string;
+  skills: string[];
+  hourlyRate: number;
+  currency: string;
+  availability: 'available' | 'busy' | 'unavailable';
+  yearsExperience: number;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
+  websiteUrl: string | null;
+  portfolioRepos: string[];
+  totalReviews: number;
+  avgRating: number;
+  isFeatured: boolean;
+  isVisible: boolean;
+  createdAt: string;
+  // Joined from profiles
+  displayName?: string;
+  avatarUrl?: string;
+  githubLogin?: string;
+}
+
+export type ConsultationServiceType = 'code_review' | 'security_audit' | 'architecture' | 'onboarding' | 'mentoring' | 'other';
+export type ConsultationStatus = 'pending' | 'accepted' | 'declined' | 'completed' | 'canceled';
+
+export interface ConsultationRequest {
+  id: string;
+  requesterId: string;
+  expertId: string;
+  repoUrl: string | null;
+  analysisId: string | null;
+  serviceType: ConsultationServiceType;
+  message: string;
+  budgetCents: number | null;
+  status: ConsultationStatus;
+  expertResponse: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Joined
+  expertName?: string;
+  requesterName?: string;
+}

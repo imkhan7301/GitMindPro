@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { AnalysisResult, PRReviewResult, SavedAnalysis, SavedPRReview, Scorecard, Workspace, WorkspaceInvitation, WorkspaceMember } from '../types';
+import { AnalysisResult, PRReviewResult, SavedAnalysis, SavedPRReview, Scorecard, Workspace, WorkspaceInvitation, WorkspaceMember, ExpertProfile, ConsultationRequest, ConsultationServiceType } from '../types';
 
 // Fallback values are anon/public and keep auth working if a deployment misses env injection.
 const fallbackSupabaseUrl = 'https://kkdgrbixapjlpynuulie.supabase.co';
@@ -691,4 +691,195 @@ export const getReferralStats = async (userId: string): Promise<{ count: number;
     count: redeemed.length,
     daysEarned: redeemed.reduce((sum: number, r: { bonus_days: number }) => sum + (r.bonus_days || 7), 0),
   };
+};
+
+// ─── Expert Marketplace ──────────────────────────────────────────
+
+const mapExpertRow = (row: Record<string, unknown>): ExpertProfile => ({
+  id: row.id as string,
+  userId: row.user_id as string,
+  headline: (row.headline ?? '') as string,
+  bio: (row.bio ?? '') as string,
+  skills: (row.skills ?? []) as string[],
+  hourlyRate: (row.hourly_rate ?? 0) as number,
+  currency: (row.currency ?? 'USD') as string,
+  availability: (row.availability ?? 'available') as ExpertProfile['availability'],
+  yearsExperience: (row.years_experience ?? 0) as number,
+  githubUrl: row.github_url as string | null,
+  linkedinUrl: row.linkedin_url as string | null,
+  websiteUrl: row.website_url as string | null,
+  portfolioRepos: (row.portfolio_repos ?? []) as string[],
+  totalReviews: (row.total_reviews ?? 0) as number,
+  avgRating: Number(row.avg_rating ?? 0),
+  isFeatured: Boolean(row.is_featured),
+  isVisible: Boolean(row.is_visible),
+  createdAt: row.created_at as string,
+  displayName: (row as Record<string, unknown>).profiles
+    ? ((row as Record<string, Record<string, unknown>>).profiles?.full_name as string | undefined) || ((row as Record<string, Record<string, unknown>>).profiles?.github_login as string | undefined)
+    : undefined,
+  avatarUrl: (row as Record<string, unknown>).profiles
+    ? (row as Record<string, Record<string, unknown>>).profiles?.avatar_url as string | undefined
+    : undefined,
+  githubLogin: (row as Record<string, unknown>).profiles
+    ? (row as Record<string, Record<string, unknown>>).profiles?.github_login as string | undefined
+    : undefined,
+});
+
+/** Get or create the current user's expert profile. */
+export const getMyExpertProfile = async (userId: string): Promise<ExpertProfile | null> => {
+  const supabase = getClient();
+  const { data } = await supabase
+    .from('expert_profiles')
+    .select('*, profiles(full_name, avatar_url, github_login)')
+    .eq('user_id', userId)
+    .single();
+  return data ? mapExpertRow(data as Record<string, unknown>) : null;
+};
+
+/** Create or update expert profile. */
+export const upsertExpertProfile = async (userId: string, fields: {
+  headline: string;
+  bio: string;
+  skills: string[];
+  hourlyRate: number;
+  yearsExperience: number;
+  githubUrl?: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
+  portfolioRepos?: string[];
+  availability?: ExpertProfile['availability'];
+  isVisible?: boolean;
+}): Promise<ExpertProfile> => {
+  const supabase = getClient();
+  const payload = {
+    user_id: userId,
+    headline: fields.headline,
+    bio: fields.bio,
+    skills: fields.skills,
+    hourly_rate: fields.hourlyRate,
+    years_experience: fields.yearsExperience,
+    github_url: fields.githubUrl || null,
+    linkedin_url: fields.linkedinUrl || null,
+    website_url: fields.websiteUrl || null,
+    portfolio_repos: fields.portfolioRepos || [],
+    availability: fields.availability || 'available',
+    is_visible: fields.isVisible !== false,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('expert_profiles')
+    .upsert(payload, { onConflict: 'user_id' })
+    .select('*, profiles(full_name, avatar_url, github_login)')
+    .single();
+
+  if (error || !data) throw new Error(`Failed to save expert profile: ${error?.message}`);
+  return mapExpertRow(data as Record<string, unknown>);
+};
+
+/** Browse the expert directory. */
+export const listExperts = async (params?: {
+  skill?: string;
+  limit?: number;
+}): Promise<ExpertProfile[]> => {
+  const supabase = getClient();
+  let query = supabase
+    .from('expert_profiles')
+    .select('*, profiles(full_name, avatar_url, github_login)')
+    .eq('is_visible', true)
+    .order('is_featured', { ascending: false })
+    .order('avg_rating', { ascending: false })
+    .limit(params?.limit ?? 50);
+
+  if (params?.skill) {
+    query = query.contains('skills', [params.skill]);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Failed to list experts: ${error.message}`);
+  return (data || []).map((r: unknown) => mapExpertRow(r as Record<string, unknown>));
+};
+
+/** Send a consultation request to an expert. */
+export const createConsultationRequest = async (params: {
+  requesterId: string;
+  expertId: string;
+  repoUrl?: string;
+  analysisId?: string;
+  serviceType: ConsultationServiceType;
+  message: string;
+  budgetCents?: number;
+}): Promise<ConsultationRequest> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('consultation_requests')
+    .insert({
+      requester_id: params.requesterId,
+      expert_id: params.expertId,
+      repo_url: params.repoUrl || null,
+      analysis_id: params.analysisId ? Number(params.analysisId) : null,
+      service_type: params.serviceType,
+      message: params.message,
+      budget_cents: params.budgetCents || null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(`Failed to create consultation request: ${error?.message}`);
+  return {
+    id: data.id,
+    requesterId: data.requester_id,
+    expertId: data.expert_id,
+    repoUrl: data.repo_url,
+    analysisId: data.analysis_id ? String(data.analysis_id) : null,
+    serviceType: data.service_type,
+    message: data.message,
+    budgetCents: data.budget_cents,
+    status: data.status,
+    expertResponse: data.expert_response,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+};
+
+/** Get consultation requests for current user (as requester or expert). */
+export const getMyConsultations = async (userId: string): Promise<ConsultationRequest[]> => {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from('consultation_requests')
+    .select('*')
+    .or(`requester_id.eq.${userId},expert_id.in.(select id from expert_profiles where user_id = '${userId}')`)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(`Failed to load consultations: ${error.message}`);
+  return (data || []).map((d: Record<string, unknown>) => ({
+    id: d.id as string,
+    requesterId: d.requester_id as string,
+    expertId: d.expert_id as string,
+    repoUrl: d.repo_url as string | null,
+    analysisId: d.analysis_id ? String(d.analysis_id) : null,
+    serviceType: d.service_type as ConsultationServiceType,
+    message: d.message as string,
+    budgetCents: d.budget_cents as number | null,
+    status: d.status as ConsultationRequest['status'],
+    expertResponse: d.expert_response as string | null,
+    createdAt: d.created_at as string,
+    updatedAt: d.updated_at as string,
+  }));
+};
+
+/** Expert responds to a consultation request. */
+export const respondToConsultation = async (consultationId: string, response: string, accept: boolean): Promise<void> => {
+  const supabase = getClient();
+  const { error } = await supabase
+    .from('consultation_requests')
+    .update({
+      expert_response: response,
+      status: accept ? 'accepted' : 'declined',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', consultationId);
+
+  if (error) throw new Error(`Failed to respond: ${error.message}`);
 };
