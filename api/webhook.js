@@ -10,6 +10,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+const TEAM_PRICE_ID = process.env.STRIPE_TEAM_PRICE_ID;
+const PRO_PRICE_ID = process.env.STRIPE_PRO_PRICE_ID;
+
+function resolvePlan(subscription) {
+  const priceId = subscription.items?.data?.[0]?.price?.id;
+  if (TEAM_PRICE_ID && priceId === TEAM_PRICE_ID) return 'team';
+  if (PRO_PRICE_ID && priceId === PRO_PRICE_ID) return 'pro';
+  // Fallback: check price metadata or default to pro
+  const nickname = (subscription.items?.data?.[0]?.price?.nickname || '').toLowerCase();
+  if (nickname.includes('team')) return 'team';
+  return 'pro';
+}
+
 const relevantEvents = new Set([
   'checkout.session.completed',
   'customer.subscription.updated',
@@ -50,13 +63,16 @@ export default async function handler(req, res) {
       const customerId = session.customer;
 
       if (userId && subscriptionId) {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+          expand: ['items.data.price'],
+        });
+        const plan = resolvePlan(subscription);
 
         await supabase.from('subscriptions').upsert({
           user_id: userId,
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
-          plan: 'pro',
+          plan,
           status: subscription.status === 'active' ? 'active' : 'trialing',
           current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
           updated_at: new Date().toISOString(),
@@ -67,9 +83,11 @@ export default async function handler(req, res) {
     if (event.type === 'customer.subscription.updated') {
       const subscription = event.data.object;
       const status = subscription.cancel_at_period_end ? 'canceled' : subscription.status;
+      const plan = resolvePlan(subscription);
 
       await supabase.from('subscriptions')
         .update({
+          plan,
           status: status === 'active' ? 'active' : status === 'past_due' ? 'past_due' : 'canceled',
           current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
           updated_at: new Date().toISOString(),
