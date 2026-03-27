@@ -36,7 +36,7 @@ export default async function handler(req, res) {
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: sub.stripe_customer_id,
-      return_url: req.headers.origin || 'https://gitmindpro.vercel.app',
+      return_url: req.headers.origin || 'https://gitmindpro.com',
     });
 
     return res.status(200).json({ url: portalSession.url });
