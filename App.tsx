@@ -266,6 +266,11 @@ const App: React.FC = () => {
   const [subscription, setSubscription] = useState<SubscriptionStatus>({ plan: 'free', status: 'none', currentPeriodEnd: null, isActive: false });
   const [showPricing, setShowPricing] = useState(false);
   const [checkoutBanner, setCheckoutBanner] = useState<{ type: 'success' | 'canceled'; plan?: string; trial?: boolean } | null>(null);
+  const [appToast, setAppToast] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; title: string; message?: string } | null>(null);
+  const showToast = (type: 'success' | 'error' | 'info' | 'warning', title: string, message?: string) => {
+    setAppToast({ type, title, message });
+    setTimeout(() => setAppToast(null), 5000);
+  };
   const freeDailyAnalysisLimit = getEffectiveDailyLimit(subscription);
 
   // Usage tracking for authenticated users
@@ -1838,7 +1843,7 @@ const App: React.FC = () => {
     } catch (err) {
       const message = getErrorText(err);
       addLog(`Failed to create workspace: ${message}`, 'error');
-      alert(`Workspace creation failed: ${message}`);
+      showToast('error', 'Workspace creation failed', message);
     } finally {
       setWorkspaceLoading(false);
     }
@@ -1846,7 +1851,7 @@ const App: React.FC = () => {
 
   const handleSignIn = async () => {
     if (!authEnabled) {
-      alert('Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      showToast('warning', 'Auth not configured', 'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable sign-in.');
       return;
     }
 
@@ -1856,7 +1861,7 @@ const App: React.FC = () => {
     } catch (err) {
       const message = getErrorText(err);
       addLog(`Sign-in failed: ${message}`, 'error');
-      alert(`Sign-in failed: ${message}`);
+      showToast('error', 'Sign-in failed', message);
     } finally {
       setAuthBusy(false);
     }
@@ -2083,12 +2088,12 @@ const App: React.FC = () => {
       ].join('\n');
 
       await copyToClipboard(inviteMessage, 'workspace invite');
-      alert(`Invite created for ${invite.invitedEmail}. The invite code has been copied to your clipboard.`);
+      showToast('success', 'Invite created', `Invite for ${invite.invitedEmail} copied to clipboard.`);
       addLog(`Invite created for ${invite.invitedEmail}`, 'success');
     } catch (err) {
       const message = getErrorText(err);
       addLog(`Failed to create invite: ${message}`, 'error');
-      alert(`Invite creation failed: ${message}`);
+      showToast('error', 'Invite creation failed', message);
     } finally {
       setWorkspaceLoading(false);
     }
@@ -2110,11 +2115,11 @@ const App: React.FC = () => {
       setActiveWorkspaceId(organizationId);
       window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, organizationId);
       addLog('Joined workspace successfully', 'success');
-      alert('Workspace joined successfully.');
+      showToast('success', 'Workspace joined', 'You are now a member of the workspace.');
     } catch (err) {
       const message = getErrorText(err);
       addLog(`Failed to join workspace: ${message}`, 'error');
-      alert(`Join failed: ${message}`);
+      showToast('error', 'Join failed', message);
     } finally {
       setWorkspaceLoading(false);
     }
@@ -2132,14 +2137,14 @@ const App: React.FC = () => {
       const members = await listWorkspaceMembers(activeWorkspace.id);
       const lines = members.map((member) => {
         const name = member.githubLogin ? `@${member.githubLogin}` : (member.fullName || member.email || member.id);
-        return `${member.role.toUpperCase()} - ${name}`;
+        return `${member.role.toUpperCase()} — ${name}`;
       });
-      alert(`${activeWorkspace.name} members\n\n${lines.join('\n') || 'No members found.'}`);
+      showToast('info', `${activeWorkspace.name} (${members.length} members)`, lines.join(', ') || 'No members found.');
       addLog(`Loaded ${members.length} workspace members`, 'success');
     } catch (err) {
       const message = getErrorText(err);
       addLog(`Failed to load members: ${message}`, 'error');
-      alert(`Could not load members: ${message}`);
+      showToast('error', 'Could not load members', message);
     } finally {
       setWorkspaceLoading(false);
     }
@@ -2188,7 +2193,6 @@ const App: React.FC = () => {
     if (!authUser && !canUseFreeTier()) {
       addLog('Free analyses limit reached (3/3). Sign in to continue.', 'error');
       setShowSignupPrompt(true);
-      alert('You\'ve used all 3 free analyses. Sign in with GitHub to get unlimited access or wait until tomorrow.');
       return;
     }
 
@@ -2205,7 +2209,7 @@ const App: React.FC = () => {
             if (!subscription.isActive) {
               setShowPricing(true);
             }
-            alert(`Daily limit reached: ${usage.usedToday}/${usage.limit}. ${subscription.isActive ? 'Please try again tomorrow.' : 'Upgrade to Pro for unlimited analyses!'}`);
+            showToast('error', `Daily limit reached (${usage.usedToday}/${usage.limit})`, subscription.isActive ? 'Please try again tomorrow.' : 'Upgrade to Pro for unlimited analyses.');
             return;
           }
           addLog(`Daily usage: ${usage.usedToday}/${usage.limit} analyses used`, 'info');
@@ -2503,12 +2507,10 @@ const App: React.FC = () => {
 
       if (/timed out/i.test(errorMessage)) {
         addLog('⏲️ AI analysis timed out; system is retrying with longer timeout. Try again in a moment.', 'warning');
-        alert(`Analysis timed out. We have increased timeout to 180s and will retry in a moment. Please re-run the analysis.
-
-${errorMessage}`);
+        showToast('warning', 'Analysis timed out', 'This repo may be very large. Please try again in a moment.');
       } else {
         addLog(`❌ Error: ${errorMessage}`, 'error');
-        alert(`Failed to analyze repository:\n\n${errorMessage}\n\nCheck the browser console (F12) for more details.`);
+        showToast('error', 'Analysis failed', errorMessage);
       }
     }
   };
@@ -3030,6 +3032,25 @@ ${errorMessage}`);
             </>
           )}
           <button onClick={() => setCheckoutBanner(null)} className="ml-4 p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {appToast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[210] px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-sm animate-in slide-in-from-top duration-300 flex items-start gap-3 max-w-md w-full mx-4 ${
+          appToast.type === 'success' ? 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200' :
+          appToast.type === 'error' ? 'bg-rose-950/95 border-rose-500/50 text-rose-200' :
+          appToast.type === 'warning' ? 'bg-amber-950/95 border-amber-500/50 text-amber-200' :
+          'bg-slate-900/95 border-slate-700 text-slate-200'
+        }`}>
+          <span className="text-xl shrink-0 mt-0.5">
+            {appToast.type === 'success' ? '✅' : appToast.type === 'error' ? '❌' : appToast.type === 'warning' ? '⚠️' : 'ℹ️'}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-white text-sm">{appToast.title}</p>
+            {appToast.message && <p className="text-xs opacity-80 mt-0.5 leading-relaxed">{appToast.message}</p>}
+          </div>
+          <button onClick={() => setAppToast(null)} className="p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
