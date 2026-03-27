@@ -5907,7 +5907,7 @@ const App: React.FC = () => {
                   Try Demo — Instant ⚡
                 </button>
               </div>
-              <p className="text-slate-600 text-sm">Free for 3 analyses • No signup required • Demo loads instantly</p>
+              <p className="text-slate-600 text-sm">Free for 3 analyses • No signup required • Your code is never stored • We don’t train on your data</p>
             </div>
 
             {/* Works With Bar */}
@@ -6013,6 +6013,17 @@ const App: React.FC = () => {
               <div className="text-center mb-12">
                 <h3 className="text-2xl font-black text-white mb-2">Built for Real Engineering Teams</h3>
                 <p className="text-slate-500">See what developers are saying</p>
+              </div>
+
+              {/* Data Privacy Strip */}
+              <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 mb-10 text-xs text-slate-500 font-bold uppercase tracking-widest">
+                <span className="flex items-center gap-2"><span className="text-emerald-400">✓</span> We never store your source code</span>
+                <span className="hidden sm:block w-px h-4 bg-slate-800" />
+                <span className="flex items-center gap-2"><span className="text-emerald-400">✓</span> We don’t train on your data</span>
+                <span className="hidden sm:block w-px h-4 bg-slate-800" />
+                <span className="flex items-center gap-2"><span className="text-emerald-400">✓</span> GitHub OAuth — minimum scopes only</span>
+                <span className="hidden sm:block w-px h-4 bg-slate-800" />
+                <span className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Stripe-secured payments</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
                 <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6">
