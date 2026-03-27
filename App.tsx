@@ -3477,7 +3477,7 @@ ${errorMessage}`);
               </div>
             )}
             
-            <div className="col-span-12 xl:col-span-3 space-y-6 sm:space-y-10">
+            <div className="col-span-12 lg:col-span-3 space-y-6 sm:space-y-10">
                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-10 backdrop-blur-3xl shadow-2xl relative overflow-hidden">
                   <h3 className="text-white font-black flex items-center gap-4 text-xl mb-10"><Layout className="w-6 h-6 text-indigo-400" /> File Explorer</h3>
                   <div className="max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
@@ -3486,7 +3486,7 @@ ${errorMessage}`);
                </div>
             </div>
 
-            <div className="col-span-12 xl:col-span-6 space-y-6 sm:space-y-10">
+            <div className="col-span-12 lg:col-span-6 space-y-6 sm:space-y-10">
 
               {/* Wave 16: Vibe Mode Selector */}
               {analysis && (
@@ -3868,7 +3868,8 @@ ${errorMessage}`);
                               const starScore = Math.min(20, Math.round(Math.log10((repo.stars || 0) + 1) * 10));
                               const techScore = Math.min(15, (analysis.techStack?.length || 0) * 2);
                               const scorecardAvg = (analysis.scorecard.maintenance + analysis.scorecard.documentation + analysis.scorecard.innovation + analysis.scorecard.security) / 4;
-                              const qualityScore = Math.round(scorecardAvg * 0.5);
+                              // scorecardAvg is 0-10; scale to 0-5 contribution
+                              const qualityScore = Math.round(scorecardAvg / 2);
                               const topicsScore = (repo.topics?.length || 0) > 0 ? 5 : 0;
                               const confidence = Math.min(97, 55 + starScore + techScore + qualityScore + topicsScore);
                               return (
@@ -3915,9 +3916,7 @@ ${errorMessage}`);
                               <div>
                                 <h4 className="text-white font-bold mb-2">💡 Pro Tip</h4>
                                 <p className="text-slate-400 text-sm leading-relaxed">
-                                  {Math.random() > 0.5 
-                                    ? "Click any file in the tree to get an AI explanation of what it does!"
-                                    : "The 'Recent Activity' section will show you which files are being actively changed - avoid those at first!"}
+                                  Click any file in the tree to get an AI explanation of what it does, or check Architecture to see how components connect!
                                 </p>
                               </div>
                             </div>
@@ -4507,7 +4506,7 @@ ${errorMessage}`);
                {activeTab === 'blueprint' && (
                  <>
                  <div className="grid grid-cols-12 gap-8">
-                   <div className="col-span-12 xl:col-span-8 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-0 shadow-2xl h-[700px] relative overflow-hidden flex flex-col">
+                   <div className="col-span-12 lg:col-span-8 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-0 shadow-2xl h-[700px] relative overflow-hidden flex flex-col">
                       <div className="p-10 pb-6 flex flex-wrap items-center justify-between gap-4">
                          <div>
                            <h2 className="text-3xl font-black text-white tracking-tighter">Dynamic Architecture</h2>
@@ -4552,7 +4551,7 @@ ${errorMessage}`);
                       )}
                    </div>
 
-                   <div className="col-span-12 xl:col-span-4 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl h-[700px] flex flex-col">
+                   <div className="col-span-12 lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl h-[700px] flex flex-col">
                       <div className="flex items-start justify-between gap-4 mb-6">
                         <div>
                           <h3 className="text-xl font-black text-white">Architecture Tour</h3>
@@ -5348,7 +5347,7 @@ ${errorMessage}`);
 
             </div>
 
-            <div className="col-span-12 xl:col-span-3 space-y-8">
+            <div className="col-span-12 lg:col-span-3 space-y-8">
                <div className="bg-slate-900/60 border border-slate-800 rounded-[2.5rem] p-8 backdrop-blur-3xl shadow-2xl">
                   <div className="flex items-center gap-3 mb-3">
                     <MapPin className="w-5 h-5 text-yellow-400" />

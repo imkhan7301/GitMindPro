@@ -18,7 +18,7 @@ interface Props {
   onClose: () => void;
 }
 
-const GRADE = (n: number) => n >= 85 ? 'A' : n >= 70 ? 'B' : n >= 55 ? 'C' : n >= 40 ? 'D' : 'F';
+const GRADE = (n: number) => n >= 8.5 ? 'A' : n >= 7 ? 'B' : n >= 5.5 ? 'C' : n >= 4 ? 'D' : 'F';
 const avg = (...ns: number[]) => Math.round(ns.reduce((s, v) => s + v, 0) / ns.length);
 
 const TWITTER_BLUE = 'hover:bg-[#1DA1F2]/20 hover:border-[#1DA1F2]/40 hover:text-[#1DA1F2]';
