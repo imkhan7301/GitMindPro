@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Zap, Shield, Users, Check, X, Loader2 } from 'lucide-react';
+import { Zap, Shield, Users, Check, X, Loader2, AlertTriangle } from 'lucide-react';
+
+const STRIPE_CONFIGURED =
+  import.meta.env.VITE_STRIPE_PRO_PRICE_ID &&
+  !import.meta.env.VITE_STRIPE_PRO_PRICE_ID.includes('placeholder');
 import type { SubscriptionStatus } from '../services/stripeService';
 
 interface PricingModalProps {
@@ -122,6 +126,13 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
           </button>
         </div>
 
+        {!STRIPE_CONFIGURED && (
+          <div className="mb-6 flex items-start gap-3 px-4 py-3 bg-amber-950/60 border border-amber-500/40 rounded-2xl text-amber-300 text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+            <span><strong className="text-amber-200">Stripe not configured.</strong> Set <code className="font-mono bg-amber-950 px-1 rounded">VITE_STRIPE_PRO_PRICE_ID</code> (and team/annual variants) in your Vercel environment variables to enable payments.</span>
+          </div>
+        )}
+
         {/* Billing Toggle */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <span className={`text-sm font-bold transition-colors ${interval === 'monthly' ? 'text-white' : 'text-slate-500'}`}>Monthly</span>
@@ -217,7 +228,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose, onUpgrade, onManag
                 ) : currentPricing.priceId ? (
                   <button
                     onClick={() => void handleUpgrade(currentPricing.priceId!, plan.trial)}
-                    disabled={upgrading}
+                    disabled={upgrading || !STRIPE_CONFIGURED || currentPricing.priceId.includes('placeholder')}
                     className={`w-full px-4 py-3 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
                       plan.name === 'Team' ? 'bg-violet-600 hover:bg-violet-500' : 'bg-indigo-600 hover:bg-indigo-500'
                     }`}

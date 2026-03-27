@@ -3462,7 +3462,7 @@ const App: React.FC = () => {
               )}
 
                {/* ── Tab bar ─────────────────────────────────────── */}
-               <div className="flex flex-wrap gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl">
+               <div className="flex gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] shadow-2xl overflow-x-auto no-scrollbar">
                     {[
                       { id: 'intelligence', label: 'Getting Started', icon: Rocket },
                       { id: 'blueprint', label: 'Architecture', icon: Layout },
@@ -5911,30 +5911,22 @@ const App: React.FC = () => {
             </div>
 
             {/* Works With Bar */}
-            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-10 mb-12 sm:mb-24 opacity-40">
-              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-                <Code className="w-4 h-4" /> GitHub
-              </div>
-              <div className="w-px h-4 bg-slate-700" />
-              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-                <Terminal className="w-4 h-4" /> VS Code
-              </div>
-              <div className="w-px h-4 bg-slate-700" />
-              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-                <Rocket className="w-4 h-4" /> Vercel
-              </div>
-              <div className="w-px h-4 bg-slate-700" />
-              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-                <Cloud className="w-4 h-4" /> Supabase
-              </div>
-              <div className="w-px h-4 bg-slate-700" />
-              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-                <BrainCircuit className="w-4 h-4" /> Claude MCP
-              </div>
-              <div className="w-px h-4 bg-slate-700" />
-              <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-                <Cpu className="w-4 h-4" /> Cursor
-              </div>
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-4 sm:gap-x-10 mb-12 sm:mb-24 opacity-40">
+              {[
+                { icon: Code, label: 'GitHub' },
+                { icon: Terminal, label: 'VS Code' },
+                { icon: Rocket, label: 'Vercel' },
+                { icon: Cloud, label: 'Supabase' },
+                { icon: BrainCircuit, label: 'Claude MCP' },
+                { icon: Cpu, label: 'Cursor' },
+              ].map(({ icon: Icon, label }, i, arr) => (
+                <React.Fragment key={label}>
+                  <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+                    <Icon className="w-4 h-4" /> {label}
+                  </div>
+                  {i < arr.length - 1 && <div className="hidden sm:block w-px h-4 bg-slate-700" />}
+                </React.Fragment>
+              ))}
             </div>
 
             {/* Wave 22: Animated Dashboard Preview */}
