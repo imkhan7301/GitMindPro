@@ -3005,7 +3005,7 @@ ${errorMessage}`);
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
       {checkoutBanner && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-sm animate-in slide-in-from-top duration-300 flex items-center gap-3 ${
           checkoutBanner.type === 'success'
@@ -3081,34 +3081,36 @@ ${errorMessage}`);
                         </option>
                       ))}
                     </select>
-                    <button
-                      onClick={handleCreateWorkspace}
-                      disabled={workspaceLoading}
-                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-indigo-300 hover:text-white disabled:opacity-50"
-                    >
-                      New Workspace
-                    </button>
-                    <button
-                      onClick={handleJoinWorkspace}
-                      disabled={workspaceLoading}
-                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-sky-300 hover:text-white disabled:opacity-50"
-                    >
-                      Join
-                    </button>
-                    <button
-                      onClick={handleInviteMember}
-                      disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)}
-                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-violet-300 hover:text-white disabled:opacity-50"
-                    >
-                      Invite
-                    </button>
-                    <button
-                      onClick={handleViewMembers}
-                      disabled={workspaceLoading || !activeWorkspace}
-                      className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-emerald-300 hover:text-white disabled:opacity-50"
-                    >
-                      Members
-                    </button>
+                    <div className="hidden 2xl:flex items-center gap-2">
+                      <button
+                        onClick={handleCreateWorkspace}
+                        disabled={workspaceLoading}
+                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-indigo-300 hover:text-white disabled:opacity-50"
+                      >
+                        New Workspace
+                      </button>
+                      <button
+                        onClick={handleJoinWorkspace}
+                        disabled={workspaceLoading}
+                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-sky-300 hover:text-white disabled:opacity-50"
+                      >
+                        Join
+                      </button>
+                      <button
+                        onClick={handleInviteMember}
+                        disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)}
+                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-violet-300 hover:text-white disabled:opacity-50"
+                      >
+                        Invite
+                      </button>
+                      <button
+                        onClick={handleViewMembers}
+                        disabled={workspaceLoading || !activeWorkspace}
+                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-emerald-300 hover:text-white disabled:opacity-50"
+                      >
+                        Members
+                      </button>
+                    </div>
                   </div>
                   <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">
                     {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
@@ -3291,39 +3293,12 @@ ${errorMessage}`);
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <a
-                href={vscodeExtensionUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-3 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-indigo-300 hover:text-white"
-              >
-                <Code className="w-4 h-4" /> VS Code
-              </a>
-              <a
-                href={vscodeExtensionDeepLink}
-                className="px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-500 hover:text-white"
-                aria-label="Open GitMind Pro extension in VS Code"
-                title="Requires VS Code"
-              >
-                Open in VS Code
-              </a>
-            </div>
-            {analysis && (
-              <>
-                <button onClick={() => { void fetchProjectInsights(); }} disabled={insightsLoading} className={`flex items-center gap-3 px-6 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${insights ? 'bg-emerald-600 text-white' : 'bg-slate-900 border border-slate-800 text-emerald-400 hover:text-white'}`}>
-                   <TrendingUp className="w-4 h-4" /> Team Health
-                </button>
-                <button onClick={runAudit} disabled={auditLoading} className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-slate-900 border border-slate-800 text-amber-400 hover:text-white transition-all`}>
-                  <Shield className="w-4 h-4" /> Security Audit
-                </button>
-              </>
-            )}
+
           </div>
         </div>
       </nav>
 
-      <main className="max-w-[1900px] mx-auto p-4 sm:p-8 xl:p-12 pb-32 sm:pb-48">
+      <main className="max-w-[1900px] mx-auto p-4 sm:p-8 xl:p-12 pb-20">
         {loading ? (
           <div className="h-[80vh] flex flex-col items-center justify-center space-y-12 px-4">
             {/* Animated Brain Icon */}
@@ -3449,7 +3424,7 @@ ${errorMessage}`);
             </div>
           </div>
         ) : repo && analysis ? (
-          <div className="grid grid-cols-12 gap-4 sm:gap-6 xl:gap-12">
+          <div className="grid grid-cols-12 gap-4 sm:gap-6 lg:gap-8">
             
             {/* Wave 14: Demo Mode Banner */}
             {demoMode && (
@@ -3477,7 +3452,7 @@ ${errorMessage}`);
               </div>
             )}
             
-            <div className="col-span-12 lg:col-span-3 space-y-6 sm:space-y-10">
+            <div className="col-span-12 hidden xl:block xl:col-span-3 space-y-6 sm:space-y-10">
                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-10 backdrop-blur-3xl shadow-2xl relative overflow-hidden">
                   <h3 className="text-white font-black flex items-center gap-4 text-xl mb-10"><Layout className="w-6 h-6 text-indigo-400" /> File Explorer</h3>
                   <div className="max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
@@ -3486,7 +3461,7 @@ ${errorMessage}`);
                </div>
             </div>
 
-            <div className="col-span-12 lg:col-span-6 space-y-6 sm:space-y-10">
+            <div className="col-span-12 lg:col-span-8 xl:col-span-6 space-y-6 sm:space-y-10">
 
               {/* Wave 16: Vibe Mode Selector */}
               {analysis && (
@@ -5347,7 +5322,7 @@ ${errorMessage}`);
 
             </div>
 
-            <div className="col-span-12 lg:col-span-3 space-y-8">
+            <div className="col-span-12 lg:col-span-4 xl:col-span-3 space-y-8">
                <div className="bg-slate-900/60 border border-slate-800 rounded-[2.5rem] p-8 backdrop-blur-3xl shadow-2xl">
                   <div className="flex items-center gap-3 mb-3">
                     <MapPin className="w-5 h-5 text-yellow-400" />
