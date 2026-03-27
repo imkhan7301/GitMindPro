@@ -265,6 +265,8 @@ const App: React.FC = () => {
   // Subscription state
   const [subscription, setSubscription] = useState<SubscriptionStatus>({ plan: 'free', status: 'none', currentPeriodEnd: null, isActive: false });
   const [showPricing, setShowPricing] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [checkoutBanner, setCheckoutBanner] = useState<{ type: 'success' | 'canceled'; plan?: string; trial?: boolean } | null>(null);
   const [appToast, setAppToast] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; title: string; message?: string } | null>(null);
   const showToast = (type: 'success' | 'error' | 'info' | 'warning', title: string, message?: string) => {
@@ -6056,6 +6058,18 @@ const App: React.FC = () => {
                 Analyze Your First Repo — Free
               </button>
             </div>
+
+            {/* ── Footer ── */}
+            <footer className="mt-20 sm:mt-28 pt-10 border-t border-slate-800/50 pb-36">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-600">
+                <p>© {new Date().getFullYear()} GitMindPro. All rights reserved.</p>
+                <div className="flex items-center gap-6">
+                  <button onClick={() => setShowPrivacy(true)} className="hover:text-slate-400 transition-colors">Privacy Policy</button>
+                  <button onClick={() => setShowTerms(true)} className="hover:text-slate-400 transition-colors">Terms of Service</button>
+                  <a href="mailto:support@gitmindpro.com" className="hover:text-slate-400 transition-colors">Contact</a>
+                </div>
+              </div>
+            </footer>
           </div>
         )}
       </main>
@@ -6159,7 +6173,7 @@ const App: React.FC = () => {
               </div>
               <div className="flex items-center gap-3 p-4 bg-slate-950 rounded-2xl border border-slate-800">
                 <Shield className="w-5 h-5 text-indigo-400 flex-shrink-0" />
-                <span className="text-sm text-slate-300">Team workspace (coming soon)</span>
+                <span className="text-sm text-slate-300">Team workspaces &amp; invite codes</span>
               </div>
             </div>
 
@@ -6350,6 +6364,104 @@ const App: React.FC = () => {
               ))}
             </div>
             <p className="text-slate-600 text-xs mt-6 text-center">Press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] font-mono">Esc</kbd> to close</p>
+          </div>
+        </div>
+      )}
+
+      {/* Privacy Policy Modal */}
+      {showPrivacy && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={() => setShowPrivacy(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto custom-scrollbar shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-8 py-5 flex items-center justify-between rounded-t-3xl z-10">
+              <h2 className="text-lg font-black text-white">Privacy Policy</h2>
+              <button onClick={() => setShowPrivacy(false)} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-8 py-6 space-y-6 text-sm text-slate-400 leading-relaxed">
+              <p className="text-slate-500 text-xs">Last updated: March 27, 2026</p>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">What We Collect</h3>
+                <p>When you sign in with GitHub OAuth we receive your GitHub username, email address, and avatar. We store the repository URLs you analyze and your analysis history so you can access them later. We collect usage data (analyses run, plan type) to enforce limits and improve the service.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">What We Do Not Collect</h3>
+                <p>We do not store your source code. When you analyze a repository, we query the GitHub API on your behalf and forward repository metadata to Google Gemini for AI processing. No source code is retained on our servers beyond the duration of a single request.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Third-Party Services</h3>
+                <ul className="space-y-1.5 list-disc list-inside">
+                  <li><span className="text-white font-medium">Supabase</span> — stores your account, analysis history, and workspace data.</li>
+                  <li><span className="text-white font-medium">Stripe</span> — handles billing and subscriptions. We never see your full card details.</li>
+                  <li><span className="text-white font-medium">Google Gemini</span> — processes repository metadata to generate AI insights.</li>
+                  <li><span className="text-white font-medium">GitHub OAuth</span> — authenticates your identity. We request only the minimum scopes required.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Data Retention</h3>
+                <p>Your data is retained while your account is active. You may request deletion of your account and all associated data at any time by contacting us below.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Your Rights</h3>
+                <p>You have the right to access, correct, or delete your personal data. To exercise these rights, contact us at <a href="mailto:support@gitmindpro.com" className="text-indigo-400 hover:underline">support@gitmindpro.com</a>.</p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800">
+                <p className="text-slate-500 text-xs">Questions? <a href="mailto:support@gitmindpro.com" className="text-indigo-400 hover:underline">support@gitmindpro.com</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Terms of Service Modal */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={() => setShowTerms(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto custom-scrollbar shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-8 py-5 flex items-center justify-between rounded-t-3xl z-10">
+              <h2 className="text-lg font-black text-white">Terms of Service</h2>
+              <button onClick={() => setShowTerms(false)} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-8 py-6 space-y-6 text-sm text-slate-400 leading-relaxed">
+              <p className="text-slate-500 text-xs">Last updated: March 27, 2026</p>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Using GitMindPro</h3>
+                <p>You may use GitMindPro to analyze public GitHub repositories. To analyze private repositories, you must provide a GitHub Personal Access Token (PAT) with the appropriate scopes. You are responsible for ensuring you have the right to analyze any repository you submit.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Free &amp; Pro Plans</h3>
+                <p>Free accounts receive 3 analyses per day. Pro accounts receive unlimited analyses. Billing is as described on the pricing page. Subscriptions auto-renew until cancelled. You may cancel at any time through your billing portal.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">No Warranty</h3>
+                <p>GitMindPro is provided "as is" without warranty of any kind. AI-generated analysis may contain errors and should not be used as the sole basis for security or architectural decisions. We are not liable for actions taken based on analysis output.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Your Data &amp; Outputs</h3>
+                <p>AI analysis outputs you receive are yours. We do not claim ownership of insights generated from your repositories.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Prohibited Use</h3>
+                <p>You may not use GitMindPro to: (a) probe for vulnerabilities in systems you do not own or have permission to test; (b) mass-scrape analysis outputs; (c) resell or sublicense access to the service; (d) circumvent rate limits or access controls.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white mb-2">Termination</h3>
+                <p>We reserve the right to suspend or terminate accounts that violate these terms, with or without notice.</p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800">
+                <p className="text-slate-500 text-xs">Questions? <a href="mailto:support@gitmindpro.com" className="text-indigo-400 hover:underline">support@gitmindpro.com</a></p>
+              </div>
+            </div>
           </div>
         </div>
       )}
