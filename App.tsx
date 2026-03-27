@@ -3072,7 +3072,7 @@ ${errorMessage}`);
                         }
                       }}
                       disabled={workspaceLoading || workspaces.length === 0}
-                      className="hidden md:block h-10 px-3 rounded-xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-200 appearance-none cursor-pointer"
+                      className="hidden md:block h-9 px-3 rounded-xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-200 appearance-none cursor-pointer max-w-[160px]"
                     >
                       {workspaces.length === 0 && <option value="">No Workspace</option>}
                       {workspaces.map((workspace) => (
@@ -3081,36 +3081,6 @@ ${errorMessage}`);
                         </option>
                       ))}
                     </select>
-                    <div className="hidden 2xl:flex items-center gap-2">
-                      <button
-                        onClick={handleCreateWorkspace}
-                        disabled={workspaceLoading}
-                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-indigo-300 hover:text-white disabled:opacity-50"
-                      >
-                        New Workspace
-                      </button>
-                      <button
-                        onClick={handleJoinWorkspace}
-                        disabled={workspaceLoading}
-                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-sky-300 hover:text-white disabled:opacity-50"
-                      >
-                        Join
-                      </button>
-                      <button
-                        onClick={handleInviteMember}
-                        disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)}
-                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-violet-300 hover:text-white disabled:opacity-50"
-                      >
-                        Invite
-                      </button>
-                      <button
-                        onClick={handleViewMembers}
-                        disabled={workspaceLoading || !activeWorkspace}
-                        className="px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-emerald-300 hover:text-white disabled:opacity-50"
-                      >
-                        Members
-                      </button>
-                    </div>
                   </div>
                   <span className="px-4 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-emerald-300">
                     {authUser.user_metadata?.user_name ? `@${authUser.user_metadata.user_name}` : (authUser.email || 'Signed in')}
@@ -5448,7 +5418,7 @@ ${errorMessage}`);
           /* ───── AUTHENTICATED DASHBOARD ───── */
           <div className="max-w-7xl mx-auto py-12 px-8">
             {/* Welcome Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
                 <h1 className="text-3xl font-black text-white mb-1">Welcome back{authUser.user_metadata?.user_name ? `, ${authUser.user_metadata.user_name}` : ''}</h1>
                 <p className="text-slate-500 text-sm">Your AI-powered code intelligence hub</p>
@@ -5472,7 +5442,31 @@ ${errorMessage}`);
               </div>
             </div>
 
-            {/* Dashboard Tabs */}
+            {/* Workspace Management Row */}
+            <div className="flex flex-wrap items-center gap-2 mb-8 p-4 bg-slate-900/40 border border-slate-800 rounded-2xl">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2">Workspace</span>
+              <select
+                value={activeWorkspaceId}
+                onChange={(e) => {
+                  const nextWorkspaceId = e.target.value;
+                  setActiveWorkspaceId(nextWorkspaceId);
+                  if (nextWorkspaceId) window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, nextWorkspaceId);
+                }}
+                disabled={workspaceLoading || workspaces.length === 0}
+                className="h-9 px-3 rounded-xl bg-slate-950 border border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-200 appearance-none cursor-pointer"
+              >
+                {workspaces.length === 0 && <option value="">No Workspace</option>}
+                {workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}{workspace.isPersonal ? ' (Personal)' : ''}
+                  </option>
+                ))}
+              </select>
+              <button onClick={handleCreateWorkspace} disabled={workspaceLoading} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-indigo-300 hover:text-white hover:border-indigo-500 transition-all disabled:opacity-50">+ New</button>
+              <button onClick={handleJoinWorkspace} disabled={workspaceLoading} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-sky-300 hover:text-white hover:border-sky-500 transition-all disabled:opacity-50">Join</button>
+              <button onClick={handleInviteMember} disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-violet-300 hover:text-white hover:border-violet-500 transition-all disabled:opacity-50">Invite</button>
+              <button onClick={handleViewMembers} disabled={workspaceLoading || !activeWorkspace} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-emerald-300 hover:text-white hover:border-emerald-500 transition-all disabled:opacity-50">Members</button>
+            </div>
             <div className="flex items-center gap-1 mb-10 bg-slate-900/40 border border-slate-800 rounded-xl p-1 w-fit">
               <button onClick={() => setDashboardTab('home')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${dashboardTab === 'home' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
                 Home
