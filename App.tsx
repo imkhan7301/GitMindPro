@@ -3046,8 +3046,8 @@ ${errorMessage}`);
           
           <form onSubmit={handleImport} className="flex-grow max-w-xl mx-2 sm:mx-12 relative group min-w-0">
             <Search className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-slate-500 transition-colors" />
-            <input className="w-full bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl pl-12 sm:pl-16 pr-12 sm:pr-20 py-3 sm:py-5 text-sm sm:text-lg text-white outline-none placeholder:text-slate-600 shadow-2xl" placeholder="Paste GitHub repo URL..." value={url} onChange={(e) => setUrl(e.target.value)} />
-            <button type="button" onClick={() => { setCmdPaletteOpen(true); setCmdQuery(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-[10px] text-slate-500 hover:text-slate-400 transition-colors">
+            <input className="w-full bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl pl-12 sm:pl-16 pr-4 sm:pr-20 py-3 sm:py-5 text-sm sm:text-lg text-white outline-none placeholder:text-slate-600 shadow-2xl" placeholder="Paste GitHub repo URL..." value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button type="button" onClick={() => { setCmdPaletteOpen(true); setCmdQuery(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-[10px] text-slate-500 hover:text-slate-400 transition-colors">
               <span className="font-mono">⌘K</span>
             </button>
           </form>
@@ -3072,7 +3072,7 @@ ${errorMessage}`);
                         }
                       }}
                       disabled={workspaceLoading || workspaces.length === 0}
-                      className="px-3 py-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-200"
+                      className="hidden md:block h-10 px-3 rounded-xl bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-200 appearance-none cursor-pointer"
                     >
                       {workspaces.length === 0 && <option value="">No Workspace</option>}
                       {workspaces.map((workspace) => (
