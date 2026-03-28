@@ -3425,7 +3425,7 @@ const App: React.FC = () => {
                </div>
             </div>
 
-            <div className="col-span-12 lg:col-span-8 xl:col-span-6 space-y-6 sm:space-y-10">
+            <div className="col-span-12 lg:col-span-8 xl:col-span-5 space-y-6 sm:space-y-10">
 
               {/* Wave 16: Vibe Mode Selector */}
               {analysis && (
@@ -5292,7 +5292,7 @@ const App: React.FC = () => {
 
             </div>
 
-            <div className="col-span-12 lg:col-span-4 xl:col-span-3 space-y-8">
+            <div className="col-span-12 lg:col-span-4 xl:col-span-4 space-y-8">
                <div className="bg-slate-900/60 border border-slate-800 rounded-[2.5rem] p-8 backdrop-blur-3xl shadow-2xl">
                   <div className="flex items-center gap-3 mb-3">
                     <MapPin className="w-5 h-5 text-yellow-400" />
@@ -5305,7 +5305,7 @@ const App: React.FC = () => {
                     <span className="text-xs text-slate-400">Visible for shared screenshots and QA checks.</span>
                   </div>
                </div>
-               <div className="bg-slate-900/60 border border-slate-800 rounded-[2rem] flex flex-col max-h-[400px] min-h-[300px] overflow-hidden backdrop-blur-3xl shadow-2xl">
+               <div className="bg-slate-900/60 border border-slate-800 rounded-[2rem] flex flex-col h-[680px] overflow-hidden backdrop-blur-3xl shadow-2xl sticky top-4">
                   {/* Header */}
                   <div className="p-6 border-b border-slate-800 bg-gradient-to-r from-indigo-600/20 to-purple-600/20">
                     <div className="flex items-center justify-between">
@@ -5350,8 +5350,8 @@ const App: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Chat History - Compact */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                    {/* Chat History */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar min-h-0">
                       {chatHistory.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[85%] p-3 rounded-xl text-sm leading-relaxed ${
