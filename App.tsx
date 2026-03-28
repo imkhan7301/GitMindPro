@@ -1962,7 +1962,6 @@ const App: React.FC = () => {
 
   const handleTourStepChange = (index: number) => {
     setTourAutoPlay(false);
-    setTourHasAutoPlayed(true);
     setTourStepIndex(Math.max(0, Math.min(index, tourSteps.length - 1)));
   };
 
@@ -4495,8 +4494,13 @@ const App: React.FC = () => {
                            </button>
                            <button
                              onClick={() => {
-                               setTourAutoPlay((prev) => !prev);
-                               setTourHasAutoPlayed(true);
+                               if (!tourAutoPlay) {
+                                 setTourStepIndex(0);
+                                 setTourHasAutoPlayed(false);
+                                 setTourAutoPlay(true);
+                               } else {
+                                 setTourAutoPlay(false);
+                               }
                              }}
                              className="text-[10px] font-black uppercase bg-amber-500/10 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-lg hover:text-white transition-colors"
                            >
