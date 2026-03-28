@@ -3120,7 +3120,7 @@ const App: React.FC = () => {
                       >
                         <CreditCard className="w-4 h-4" /> {subscription.plan === 'team' ? 'Team' : 'Pro'}
                       </button>
-                      <div className="px-3 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1.5">
+                      <div className="hidden xl:flex px-3 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black uppercase tracking-widest text-emerald-400 items-center gap-1.5">
                         <Activity className="w-3 h-3" /> Unlimited
                       </div>
                     </div>
@@ -3195,7 +3195,7 @@ const App: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setShowChangelog(true)}
-                    className="flex items-center gap-2 px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300"
+                    className="hidden lg:flex items-center gap-2 px-3 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300"
                     title="What's New"
                   >
                     <Sparkles className="w-4 h-4" />
@@ -3203,9 +3203,9 @@ const App: React.FC = () => {
                   <button
                     onClick={handleSignOut}
                     disabled={authBusy}
-                    className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 lg:px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
                   >
-                    <LogOut className="w-4 h-4" /> Sign out
+                    <LogOut className="w-4 h-4" /> <span className="hidden lg:inline">Sign out</span>
                   </button>
                   <NotificationCenter
                     authUser={authUser}
@@ -5459,8 +5459,11 @@ const App: React.FC = () => {
                 <button onClick={() => setShowExportCSV(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all" title="Export History">
                   <Download className="w-3.5 h-3.5" /> Export
                 </button>
-                <button onClick={() => setShowPricing(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all">
-                  <CreditCard className="w-3.5 h-3.5" /> {subscription.plan === 'free' ? 'Upgrade' : subscription.plan.toUpperCase()}
+                <button
+                  onClick={() => subscription.isActive ? void openBillingPortal(authUser.id) : setShowPricing(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition-all"
+                >
+                  <CreditCard className="w-3.5 h-3.5" /> {subscription.plan === 'free' ? 'Upgrade' : 'Manage Plan'}
                 </button>
               </div>
             </div>
@@ -5487,8 +5490,8 @@ const App: React.FC = () => {
               </select>
               <button onClick={handleCreateWorkspace} disabled={workspaceLoading} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-indigo-300 hover:text-white hover:border-indigo-500 transition-all disabled:opacity-50">+ New</button>
               <button onClick={handleJoinWorkspace} disabled={workspaceLoading} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-sky-300 hover:text-white hover:border-sky-500 transition-all disabled:opacity-50">Join</button>
-              <button onClick={handleInviteMember} disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-violet-300 hover:text-white hover:border-violet-500 transition-all disabled:opacity-50">Invite</button>
-              <button onClick={handleViewMembers} disabled={workspaceLoading || !activeWorkspace} className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-emerald-300 hover:text-white hover:border-emerald-500 transition-all disabled:opacity-50">Members</button>
+              <button onClick={handleInviteMember} disabled={workspaceLoading || !activeWorkspace || activeWorkspace.isPersonal || !['owner', 'admin'].includes(activeWorkspace.role)} className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-violet-300 hover:text-white hover:border-violet-500 transition-all disabled:opacity-50 ${activeWorkspace?.isPersonal ? 'hidden' : ''}`}>Invite</button>
+              <button onClick={handleViewMembers} disabled={workspaceLoading || !activeWorkspace} className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-950 border border-slate-700 text-emerald-300 hover:text-white hover:border-emerald-500 transition-all disabled:opacity-50 ${activeWorkspace?.isPersonal ? 'hidden' : ''}`}>Members</button>
             </div>
             <div className="flex items-center gap-1 mb-10 bg-slate-900/40 border border-slate-800 rounded-xl p-1 w-fit">
               <button onClick={() => setDashboardTab('home')} className={`px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${dashboardTab === 'home' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
