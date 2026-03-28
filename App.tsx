@@ -4357,9 +4357,9 @@ const App: React.FC = () => {
                            <h4 className="text-lg font-black text-white mb-6">Findings</h4>
                            <div className="space-y-4 max-h-[560px] overflow-y-auto pr-2 custom-scrollbar">
                              {prReviewResult.findings.map((finding, index) => (
-                               <div key={`${finding.file}-${index}`} className="p-5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-                                 <div className="flex items-center justify-between gap-3">
-                                   <span className="text-xs font-black uppercase tracking-wider text-slate-400">{finding.file}</span>
+                               <div key={`${finding.file}-${index}`} className="p-5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3 min-w-0 overflow-hidden">
+                                 <div className="flex items-center justify-between gap-3 min-w-0">
+                                   <span className="text-xs font-black uppercase tracking-wider text-slate-400 break-all min-w-0">{finding.file}</span>
                                    <span className={`text-[9px] px-2 py-1 rounded font-black uppercase tracking-widest ${
                                      finding.severity === 'high'
                                        ? 'bg-rose-500/15 text-rose-300'
@@ -4643,8 +4643,8 @@ const App: React.FC = () => {
                                 </div>
                                 <ul className="space-y-4">
                                    {deepAudit.vulnerabilities.map((v, i) => (
-                                      <li key={i} className="text-sm text-slate-300 rounded-2xl border border-rose-500/20 bg-slate-950/60 p-4 space-y-3">
-                                        <div className="flex gap-3"><Zap className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" /> <span>{v}</span></div>
+                                      <li key={i} className="text-sm text-slate-300 rounded-2xl border border-rose-500/20 bg-slate-950/60 p-4 space-y-3 min-w-0 overflow-hidden">
+                                        <div className="flex gap-3 min-w-0"><Zap className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" /> <span className="break-words min-w-0">{v}</span></div>
                                         <div className="flex flex-wrap items-center gap-2">
                                           <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-black border ${statusClassByType[getFindingStatus(i)]}`}>
                                             {getFindingStatus(i)}
@@ -5236,9 +5236,9 @@ const App: React.FC = () => {
                     <h3 className="text-lg font-bold text-white mb-6">Deployment Recommendations</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[500px] overflow-y-auto pr-2">
                        {analysis.cloudArchitecture.map((plan, i) => (
-                          <div key={i} className="p-6 bg-slate-950 border border-slate-800 rounded-2xl hover:border-emerald-500/50 transition-all">
-                             <div className="flex justify-between items-start mb-3">
-                                <h4 className="text-base font-black text-white">{plan.serviceName}</h4>
+                          <div key={i} className="p-6 bg-slate-950 border border-slate-800 rounded-2xl hover:border-emerald-500/50 transition-all min-w-0 overflow-hidden">
+                             <div className="flex justify-between items-start mb-3 gap-2">
+                                <h4 className="text-base font-black text-white break-words min-w-0">{plan.serviceName}</h4>
                                 <span className={`text-[8px] font-black uppercase px-2 py-1 rounded flex-shrink-0 ${plan.complexity === 'Low' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                                   {plan.complexity}
                                 </span>
