@@ -6466,10 +6466,10 @@ const App: React.FC = () => {
                           <button
                             key={i}
                             onClick={() => { void submitChat(item.q); }}
-                            className="text-left p-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 rounded-xl transition-all text-xs group"
+                            className="flex items-start gap-2 p-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/50 rounded-xl transition-all text-xs group text-left"
                           >
-                            <span className="text-sm">{item.icon}</span>
-                            <span className="ml-2 text-slate-300 group-hover:text-white transition-colors">{item.q}</span>
+                            <span className="shrink-0 mt-0.5">{item.icon}</span>
+                            <span className="text-slate-300 group-hover:text-white transition-colors leading-snug">{item.q}</span>
                           </button>
                         ))}
                       </div>
@@ -6562,23 +6562,21 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* Floating trigger button */}
+          {/* Floating trigger button — only shown when panel is closed */}
+          {!chatOpen && (
           <button
-            onClick={() => setChatOpen(prev => !prev)}
-            className={`fixed bottom-6 right-6 z-[101] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl font-black text-sm transition-all duration-300 hover:scale-105 active:scale-95 ${
-              chatOpen
-                ? 'bg-slate-800 border border-slate-700 text-slate-300'
-                : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-500/30'
-            }`}
+            onClick={() => setChatOpen(true)}
+            className="fixed bottom-6 right-6 z-[101] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl shadow-indigo-500/30 font-black text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white transition-all duration-300 hover:scale-105 hover:shadow-indigo-500/50 active:scale-95"
           >
-            <BrainCircuit className={`w-5 h-5 ${chatOpen ? '' : 'animate-pulse'}`} />
-            <span>{chatOpen ? 'Close' : 'AI Copilot'}</span>
-            {chatHistory.length > 0 && !chatOpen && (
-              <span className="w-5 h-5 rounded-full bg-indigo-400 text-[9px] font-black text-white flex items-center justify-center">
+            <BrainCircuit className="w-5 h-5 animate-pulse" />
+            <span>AI Copilot</span>
+            {chatHistory.length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-white/20 text-[9px] font-black text-white flex items-center justify-center">
                 {chatHistory.length}
               </span>
             )}
           </button>
+          )}
         </>
       )}
     </div>
