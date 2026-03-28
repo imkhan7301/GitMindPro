@@ -4473,9 +4473,9 @@ const App: React.FC = () => {
 
                {activeTab === 'blueprint' && (
                  <>
-                 <div className="grid grid-cols-12 gap-8">
-                   <div className="col-span-12 lg:col-span-8 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-0 shadow-2xl h-[700px] relative overflow-hidden flex flex-col">
-                      <div className="p-10 pb-6 flex flex-wrap items-center justify-between gap-4">
+                 <div className="grid grid-cols-12 gap-8 items-stretch">
+                   <div className="col-span-12 lg:col-span-8 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-0 shadow-2xl min-h-[500px] h-[600px] lg:h-[750px] relative overflow-hidden flex flex-col">
+                      <div className="p-8 sm:p-10 pb-6 flex flex-wrap items-center justify-between gap-4">
                          <div>
                            <h2 className="text-3xl font-black text-white tracking-tighter">Dynamic Architecture</h2>
                            <p className="text-xs text-slate-500 mt-2">AI-guided walkthrough with live node highlights.</p>
@@ -4519,7 +4519,7 @@ const App: React.FC = () => {
                       )}
                    </div>
 
-                   <div className="col-span-12 lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl h-[700px] flex flex-col">
+                   <div className="col-span-12 lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-8 sm:p-10 shadow-2xl flex flex-col overflow-hidden lg:max-h-[750px]">
                       <div className="flex items-start justify-between gap-4 mb-6">
                         <div>
                           <h3 className="text-xl font-black text-white">Architecture Tour</h3>
@@ -4533,12 +4533,12 @@ const App: React.FC = () => {
                       </div>
 
                       {activeTourStep ? (
-                        <div className="mb-6 p-6 bg-slate-950 rounded-2xl border border-amber-500/20">
+                        <div className="mb-4 p-5 bg-slate-950 rounded-2xl border border-amber-500/20 flex-shrink-0 max-h-[260px] overflow-y-auto custom-scrollbar">
                           <div className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-3">
                             {analysis?.architectureTour?.title || 'Guided Walkthrough'}
                           </div>
                           <h4 className="text-white font-bold mb-3">{activeTourStep.title}</h4>
-                          <ul className="space-y-2">
+                          <ul className="space-y-2 pr-1">
                             {activeTourStep.bullets.map((bullet, idx) => (
                               <li key={`${activeTourStep.nodeId}-${idx}`} className="text-slate-300 text-sm leading-relaxed flex gap-2">
                                 <span className="text-amber-400 mt-1">•</span>
@@ -4546,7 +4546,7 @@ const App: React.FC = () => {
                               </li>
                             ))}
                           </ul>
-                          <div className="flex items-center gap-3 mt-6">
+                          <div className="flex items-center gap-3 mt-4">
                             <button
                               onClick={() => handleTourStepChange(tourStepIndex - 1)}
                               disabled={tourStepIndex === 0}
