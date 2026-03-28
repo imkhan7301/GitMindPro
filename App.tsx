@@ -3674,15 +3674,15 @@ const App: React.FC = () => {
                                 className="p-8 bg-slate-950 rounded-2xl border border-slate-800 hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-2 transition-all duration-300 cursor-pointer group animate-in fade-in zoom-in min-w-0"
                                 style={{animationDelay: `${i * 120}ms`}}
                               >
-                                <h4 className="text-lg font-black text-white mb-4 group-hover:text-amber-400 transition-colors flex items-center gap-2 break-words">
-                                  <span className="text-2xl">🎯</span>
-                                  {task.task}
+                                <h4 className="text-lg font-black text-white mb-4 group-hover:text-amber-400 transition-colors flex items-start gap-2">
+                                  <span className="text-2xl shrink-0">🎯</span>
+                                  <span className="break-words min-w-0">{task.task}</span>
                                 </h4>
                                 <ol className="space-y-2">
                                   {task.steps.map((step, j) => (
                                     <li key={j} className="text-sm text-slate-400 group-hover:text-slate-300 flex gap-3 transition-colors min-w-0">
-                                      <span className="text-amber-500 font-bold group-hover:scale-125 transition-transform inline-block">{j + 1}.</span>
-                                      <span className="break-words">{step}</span>
+                                      <span className="text-amber-500 font-bold group-hover:scale-125 transition-transform inline-block shrink-0">{j + 1}.</span>
+                                      <span className="break-words min-w-0">{step}</span>
                                     </li>
                                   ))}
                                 </ol>
@@ -3737,7 +3737,8 @@ const App: React.FC = () => {
                                     <li 
                                       key={i} 
                                       onClick={() => openFileByPath(file)}
-                                      className="text-sm text-slate-300 font-mono cursor-pointer hover:text-emerald-300 transition-colors"
+                                      className="text-sm text-slate-300 font-mono cursor-pointer hover:text-emerald-300 transition-colors break-all"
+                                      title={file}
                                     >
                                       {file}
                                     </li>
