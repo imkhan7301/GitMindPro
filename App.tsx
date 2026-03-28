@@ -2874,100 +2874,69 @@ const App: React.FC = () => {
 
     const userMsg: ChatMessage = { role: 'user', text: input, timestamp: Date.now() };
     setChatHistory(prev => [...prev, userMsg]);
-    const question = input.toLowerCase();
     setChatInput('');
     setChatLoading(true);
-    
+
     try {
-      // Smart instant answers using loaded data
-      let instantAnswer = '';
-      let fileLinks: string[] | undefined;
-      
-      // Question: Where to start?
-      if (question.includes('where') && (question.includes('start') || question.includes('begin'))) {
-        instantAnswer = `🚀 Great question! Here's your starting path:\n\n`;
-        if (onboardingGuide?.criticalFiles.length) {
-          fileLinks = onboardingGuide.criticalFiles.slice(0, 4);
-          instantAnswer += `📂 Start by reading these key files (click below to open):\n`;
-        }
-        instantAnswer += onboardingGuide?.quickStart || 'Check the Getting Started tab for a personalized onboarding guide!';
-      }
-      
-      // Question: Who owns X? / Team questions
-      else if ((question.includes('who') || question.includes('team')) && (question.includes('own') || question.includes('auth') || question.includes('built'))) {
-        if (onboardingGuide?.codeOwnership) {
-          instantAnswer = `👥 Code Ownership Guidance:\n\n${onboardingGuide.codeOwnership}\n\nCheck the Team & Issues tab for more details!`;
-        } else {
-          instantAnswer = `I don't have team data loaded yet. This might be a private repo or GitHub API rate limits kicked in.`;
-        }
-      }
-      
-      // Question: What's active? / Hot zones
-      else if ((question.includes('active') || question.includes('hot') || question.includes('recent')) && !question.includes('test')) {
-        if (onboardingGuide?.recentActivity && onboardingGuide.recentActivity.hotFiles.length > 0) {
-          instantAnswer = `🔥 Hot Development Zones (Last 7 days):\n\n`;
-          onboardingGuide.recentActivity.hotFiles.slice(0, 5).forEach(([file, count], i) => {
-            instantAnswer += `${i + 1}. **${file}**: ${count} changes\n`;
-          });
-          instantAnswer += `\nTotal commits: ${onboardingGuide.recentActivity.totalCommits}, active devs: ${onboardingGuide.recentActivity.activeDevs}.`;
-        } else {
-          instantAnswer = `No recent activity data available. Check the Team & Issues tab for live data!`;
-        }
-      }
-      
-      // Question: Tech stack / Dependencies
-      else if (question.includes('tech') || question.includes('stack') || question.includes('dependencies') || question.includes('explain')) {
-        instantAnswer = `⚙️ Tech Stack Overview:\n\n`;
-        instantAnswer += `**Primary Technologies:**\n${analysis.techStack.slice(0, 8).map(tech => `• ${tech}`).join('\n')}\n\n`;
-        instantAnswer += `Check the Tech Stack tab for the full breakdown with dependencies!`;
-      }
-      
-      // Question: Testing
-      else if (question.includes('test') || question.includes('testing')) {
-        if (onboardingGuide?.testingSetup) {
-          instantAnswer = `🧪 Testing Setup:\n\n`;
-          instantAnswer += `**Framework**: ${onboardingGuide.testingSetup.testFramework}\n\n`;
-          instantAnswer += `**How to run tests:**\n\n\`\`\`\n${onboardingGuide.testingSetup.testCommand}\n\`\`\`\n\n`;
-          instantAnswer += onboardingGuide.testingSetup.guidance;
-        } else {
-          instantAnswer = `No testing setup detected in this repo. You might need to set it up!`;
-        }
-      }
-      
-      // Question: Deploy / Deployment
-      else if (question.includes('deploy') || question.includes('deployment') || question.includes('production')) {
-        instantAnswer = `🚢 Deployment Info:\n\n`;
-        const deploymentFiles = structure.filter(f => 
-          f.path.includes('deploy') || 
-          f.path.includes('dockerfile') || 
-          f.path.includes('.github/workflows') ||
-          f.path.includes('vercel.json') ||
-          f.path.includes('netlify.toml')
-        );
-        if (deploymentFiles.length > 0) {
-          instantAnswer += `Found these deployment configs:\n${deploymentFiles.map(f => `• ${f.path}`).join('\n')}\n\n`;
-          instantAnswer += `Check these files for deployment instructions!`;
-        } else {
-          instantAnswer += `No obvious deployment configs found. Check the README or ask the team!`;
-        }
-      }
-      
-      // Fallback: Use AI for complex questions
-      if (!instantAnswer) {
-        const response = await chatWithRepo(chatHistory, userMsg.text, repo.repo);
-        setChatHistory(prev => [...prev, { role: 'model', text: response, timestamp: Date.now() }]);
-      } else {
-        // Add instant answer
-        setChatHistory(prev => [...prev, { role: 'model', text: instantAnswer, timestamp: Date.now(), fileLinks }]);
-      }
+      // Build rich context string from all loaded analysis state
+      const repoContext = [
+        `Repository: ${repo.owner}/${repo.repo}`,
+        `Description: ${repo.description || 'N/A'}`,
+        `Stars: ${repo.stars?.toLocaleString() ?? 0}  |  Forks: ${repo.forks?.toLocaleString() ?? 0}  |  Language: ${repo.language || 'N/A'}`,
+        `Topics: ${(repo.topics ?? []).join(', ') || 'N/A'}`,
+        '',
+        `--- SUMMARY ---`,
+        analysis.summary,
+        '',
+        `--- TECH STACK ---`,
+        analysis.techStack.join(', '),
+        '',
+        `--- SCORECARD ---`,
+        `Maintenance: ${analysis.scorecard.maintenance}/10  |  Documentation: ${analysis.scorecard.documentation}/10  |  Security: ${analysis.scorecard.security}/10  |  Innovation: ${analysis.scorecard.innovation}/10`,
+        '',
+        `--- ARCHITECTURE ---`,
+        analysis.architectureSuggestion,
+        '',
+        `--- SECURITY SCORECARD ---`,
+        `Security score: ${analysis.scorecard.security}/10`,
+        '',
+        `--- KEY FILES (up to 20) ---`,
+        ...(structure ?? []).slice(0, 20).map(f => f.path),
+        '',
+        ...(onboardingGuide ? [
+          `--- ONBOARDING GUIDE ---`,
+          `Quick Start: ${onboardingGuide.quickStart}`,
+          `Critical Files: ${(onboardingGuide.criticalFiles ?? []).slice(0, 8).join(', ')}`,
+          `Setup Instructions: ${onboardingGuide.setupInstructions?.slice(0, 400) ?? 'N/A'}`,
+          ...(onboardingGuide.testingSetup?.hasTests ? [
+            `Testing Framework: ${onboardingGuide.testingSetup.testFramework}`,
+            `Test Command: ${onboardingGuide.testingSetup.testCommand}`,
+          ] : []),
+          ...(onboardingGuide.recentActivity ? [
+            `Recent Activity: ${onboardingGuide.recentActivity.totalCommits} commits, ${onboardingGuide.recentActivity.activeDevs} active devs`,
+            `Hot Files: ${(onboardingGuide.recentActivity.hotFiles ?? []).slice(0, 5).map(([f]) => f).join(', ')}`,
+          ] : []),
+          ...(onboardingGuide.commonTasks?.length ? [
+            `Common Tasks: ${onboardingGuide.commonTasks.map(t => t.task).join(', ')}`,
+          ] : []),
+        ] : []),
+        ...(analysis.cloudArchitecture?.length ? [
+          '',
+          `--- DEPLOYMENT OPTIONS ---`,
+          ...analysis.cloudArchitecture.map(p => `• ${p.serviceName} (${p.platform}) — ${p.complexity} complexity`),
+        ] : []),
+      ].join('\n');
+
+      const response = await chatWithRepo(chatHistory, userMsg.text, repoContext);
+      setChatHistory(prev => [...prev, { role: 'model', text: response, timestamp: Date.now() }]);
     } catch (error) {
-      setChatHistory(prev => [...prev, { 
-        role: 'model', 
-        text: '❌ Oops, something went wrong. Try rephrasing your question or check the tabs above for information!', 
-        timestamp: Date.now() 
+      setChatHistory(prev => [...prev, {
+        role: 'model',
+        text: '❌ Something went wrong. Try rephrasing or check the analysis tabs directly.',
+        timestamp: Date.now()
       }]);
-    } finally { 
-      setChatLoading(false); 
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -5361,10 +5330,10 @@ const App: React.FC = () => {
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">💡 Quick questions:</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
-                            { q: "Where to start?", icon: "🚀" },
-                            { q: "Tech stack?", icon: "⚙️" },
-                            { q: "How to test?", icon: "🧪" },
-                            { q: "Deploy process?", icon: "🚢" }
+                            { q: "Where should I start contributing?", icon: "🚀" },
+                            { q: "What are the main security risks?", icon: "🔒" },
+                            { q: "How do I run the tests?", icon: "🧪" },
+                            { q: "Explain the architecture", icon: "🏗️" }
                           ].map((item, i) => (
                             <button
                               key={i}
@@ -5396,7 +5365,36 @@ const App: React.FC = () => {
                                 <span className="text-xs font-bold text-indigo-400">AI</span>
                               </div>
                             )}
-                            <div className="whitespace-pre-wrap text-xs">{msg.text}</div>
+                            {msg.role === 'model' ? (
+                              <div className="text-xs space-y-1.5 leading-relaxed">
+                                {msg.text.split('\n').map((line, li) => {
+                                  // Code block fence — handled as a group below, but single lines fallback fine
+                                  if (line.startsWith('```')) return null;
+                                  // Bullet
+                                  if (/^[-*•]\s/.test(line)) {
+                                    const content = line.replace(/^[-*•]\s/, '');
+                                    return <div key={li} className="flex gap-1.5"><span className="text-indigo-400 shrink-0">•</span><span dangerouslySetInnerHTML={{ __html: content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code class="bg-slate-900 px-1 rounded text-emerald-300 font-mono">$1</code>') }} /></div>;
+                                  }
+                                  // Numbered list
+                                  if (/^\d+\.\s/.test(line)) {
+                                    const num = line.match(/^(\d+)\./)?.[1];
+                                    const content = line.replace(/^\d+\.\s/, '');
+                                    return <div key={li} className="flex gap-1.5"><span className="text-indigo-400 font-bold shrink-0">{num}.</span><span dangerouslySetInnerHTML={{ __html: content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code class="bg-slate-900 px-1 rounded text-emerald-300 font-mono">$1</code>') }} /></div>;
+                                  }
+                                  // Heading
+                                  if (/^#{1,3}\s/.test(line)) {
+                                    const content = line.replace(/^#{1,3}\s/, '');
+                                    return <div key={li} className="font-bold text-white mt-2">{content}</div>;
+                                  }
+                                  // Empty line = spacer
+                                  if (!line.trim()) return <div key={li} className="h-1" />;
+                                  // Normal line with inline formatting
+                                  return <div key={li} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code class="bg-slate-900 px-1 rounded text-emerald-300 font-mono">$1</code>') }} />;
+                                })}
+                              </div>
+                            ) : (
+                              <div className="text-xs leading-relaxed">{msg.text}</div>
+                            )}
                             {msg.fileLinks && msg.fileLinks.length > 0 && (
                               <div className="mt-3 space-y-1">
                                 {msg.fileLinks.map((path) => (

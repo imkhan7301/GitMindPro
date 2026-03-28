@@ -522,18 +522,42 @@ export const explainCode = async (fileName: string, content: string): Promise<st
   }
 };
 
-export const chatWithRepo = async (_history: ChatMessage[], question: string, context: string): Promise<string> => {
+export const chatWithRepo = async (history: ChatMessage[], question: string, context: string): Promise<string> => {
   try {
     checkRateLimit('chat');
     const ai = new GoogleGenAI({ apiKey: getApiKey() });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: {
-        parts: [{ text: `CONTEXT: ${context}\n\nQUESTION: ${question}` }]
-      }
-    });
+
+    const systemPrompt =
+      `You are an expert AI code intelligence assistant — like GitHub Copilot — deeply familiar with the repository analyzed below.\n` +
+      `You have full knowledge of its architecture, tech stack, security findings, active files, team, testing setup, and scorecard.\n` +
+      `Answer questions concisely and specifically using ONLY the actual analysis data provided.\n` +
+      `Use markdown in responses: **bold**, \`inline code\`, code blocks, and bullet points.\n` +
+      `When referencing specific files, use their exact paths.\n` +
+      `If something isn't in the analysis data, say so clearly and suggest the relevant tab.\n\n` +
+      `REPOSITORY ANALYSIS DATA:\n${context}`;
+
+    // Build multi-turn contents: system primer first, then conversation history, then new question
+    const contents: { role: string; parts: { text: string }[] }[] = [
+      { role: 'user', parts: [{ text: systemPrompt }] },
+      { role: 'model', parts: [{ text: 'Understood. I have full knowledge of this repository. Ask me anything about its code, architecture, security, team, or how to contribute.' }] },
+    ];
+
+    // Append last 12 turns of history for multi-turn context
+    for (const msg of history.slice(-12)) {
+      contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] });
+    }
+
+    // Append the new question
+    contents.push({ role: 'user', parts: [{ text: question }] });
+
+    const response = await withTimeout(
+      generateContentWithFallback(ai, { contents }, 'chat'),
+      getTimeoutMs(),
+      'chat'
+    );
+
     logger.info('Chat response generated');
-    return response.text || "";
+    return response.text ?? '';
   } catch (error) {
     logger.error('Chat failed', error as Error);
     throw handleError(error);
