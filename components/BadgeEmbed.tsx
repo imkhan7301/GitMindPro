@@ -10,8 +10,8 @@ interface BadgeEmbedProps {
 const BadgeEmbed: React.FC<BadgeEmbedProps> = ({ owner, repo, onClose }) => {
   const [copied, setCopied] = useState<string | null>(null);
 
-  const badgeUrl = `https://gitmindpro.vercel.app/api/badge?owner=${owner}&repo=${repo}`;
-  const linkUrl = 'https://gitmindpro.vercel.app';
+  const badgeUrl = `https://gitmindpro.com/api/badge?owner=${owner}&repo=${repo}`;
+  const linkUrl = 'https://gitmindpro.com';
 
   const snippets = {
     markdown: `[![GitMind Score](${badgeUrl})](${linkUrl})`,

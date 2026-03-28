@@ -70,7 +70,7 @@ module.exports = (req, res) => {
 
   <!-- Footer -->
   <line x1="40" y1="560" x2="1160" y2="560" stroke="#1e293b" stroke-width="1"/>
-  <text x="40" y="595" font-family="system-ui,sans-serif" font-size="16" fill="#475569">gitmindpro.vercel.app — AI-powered code intelligence</text>
+  <text x="40" y="595" font-family="system-ui,sans-serif" font-size="16" fill="#475569">gitmindpro.com — AI-powered code intelligence</text>
   <text x="1160" y="595" font-family="system-ui,sans-serif" font-size="14" fill="#6366f1" text-anchor="end">Analyze any GitHub repo →</text>
 </svg>`;
 
@@ -84,8 +84,8 @@ module.exports = (req, res) => {
   }
 
   // Default: return HTML with OG meta tags for social previews
-  const ogImageUrl = `https://gitmindpro.vercel.app/api/og?repo=${encodeURIComponent(safeRepo)}&score=${safeScore}&stack=${encodeURIComponent(stackItems.join(','))}&plan=${tier.toLowerCase()}&format=svg`;
-  const pageUrl = `https://gitmindpro.vercel.app/?repo=${encodeURIComponent(safeRepo)}`;
+  const ogImageUrl = `https://gitmindpro.com/api/og?repo=${encodeURIComponent(safeRepo)}&score=${safeScore}&stack=${encodeURIComponent(stackItems.join(','))}&plan=${tier.toLowerCase()}&format=svg`;
+  const pageUrl = `https://gitmindpro.com/?repo=${encodeURIComponent(safeRepo)}`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">

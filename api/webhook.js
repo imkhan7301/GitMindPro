@@ -11,13 +11,17 @@ const supabase = createClient(
 );
 
 const TEAM_PRICE_ID = process.env.STRIPE_TEAM_PRICE_ID;
+const TEAM_ANNUAL_PRICE_ID = process.env.STRIPE_TEAM_ANNUAL_PRICE_ID;
 const PRO_PRICE_ID = process.env.STRIPE_PRO_PRICE_ID;
+const PRO_ANNUAL_PRICE_ID = process.env.STRIPE_PRO_ANNUAL_PRICE_ID;
 
 function resolvePlan(subscription) {
   const priceId = subscription.items?.data?.[0]?.price?.id;
   if (TEAM_PRICE_ID && priceId === TEAM_PRICE_ID) return 'team';
+  if (TEAM_ANNUAL_PRICE_ID && priceId === TEAM_ANNUAL_PRICE_ID) return 'team';
   if (PRO_PRICE_ID && priceId === PRO_PRICE_ID) return 'pro';
-  // Fallback: check price metadata or default to pro
+  if (PRO_ANNUAL_PRICE_ID && priceId === PRO_ANNUAL_PRICE_ID) return 'pro';
+  // Fallback: check price nickname
   const nickname = (subscription.items?.data?.[0]?.price?.nickname || '').toLowerCase();
   if (nickname.includes('team')) return 'team';
   return 'pro';

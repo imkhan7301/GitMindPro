@@ -1341,7 +1341,7 @@ export const generateReadme = async (params: {
           `- Roadmap section (from provided roadmap)\n` +
           `- Contributing section with standard fork/PR workflow\n` +
           `- License section (MIT)\n` +
-          `- Footer: "Generated with ❤️ by [GitMind Pro](https://gitmindpro.vercel.app)"\n` +
+          `- Footer: "Generated with ❤️ by [GitMind Pro](https://gitmindpro.com)"\n` +
           `- Return ONLY raw Markdown content — no explanation, no fences around the whole doc`
       }]
     }
