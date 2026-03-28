@@ -54,6 +54,14 @@ export const signOutAuth = async (): Promise<void> => {
   }
 };
 
+// Returns the GitHub OAuth provider_token from the current session.
+// This is the user's GitHub access token — usable for GitHub API calls on their behalf.
+export const getGitHubProviderToken = async (): Promise<string | null> => {
+  const supabase = getClient();
+  const { data } = await supabase.auth.getSession();
+  return (data?.session?.provider_token as string | null | undefined) ?? null;
+};
+
 export const getCurrentUser = async (): Promise<User | null> => {
   const supabase = getClient();
   // First check if a session exists — avoids throwing on unauthenticated users

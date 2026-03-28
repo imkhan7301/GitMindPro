@@ -6,7 +6,7 @@ import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState,
 import { parseGithubUrl, fetchRepoDetails, fetchRepoStructure, fetchFileContent, fetchIssues, fetchPullRequests, fetchContributors, analyzeDependencies, fetchLanguageStats, fetchRecentCommits, fetchCodeOwnership, fetchPullRequestFiles, postPRComment, commitFileToRepo } from './services/githubService';
 import { analyzeRepository, chatWithRepo, generateSpeech, synthesizeLabTask, explainCode, generateVisionVideo, performDeepAudit, analyzeIssues, analyzePullRequests, analyzeTeamDynamics, generateOnboardingGuide, analyzeCodeOwnership, analyzeRecentActivity, analyzeTestingSetup, generateVulnerabilityRemediation, analyzePullRequestFiles, generateFixSnippet, generateCIWorkflow, analyzeDependencyRisks, generateReadme, analyzeBlameIntelligence, generateAIPRReview, calculateTechDebt, scanCVEs, generateReviewChecklist, generateArchitectureDiagram, generateCommitMessage, extractCodeIntelligence, generateChangelog, generateOnboardingChecklist, estimateTestCoverage, scanAgenticRisks, analyzeDependencyIntelligence, detectBreakingChanges, predictPRMerge, generateAIBOM, scanSupplyChain, detectDeadCode, runInvariantCheck, generateRefactoringPlan, generateSectionConfidence, analyzePerformance } from './services/geminiService';
 import type { DepRisk, BlameInsight, AIReviewResult, TechDebtReport, CVEReport } from './services/geminiService';
-import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
+import { acceptWorkspaceInvitation, canAnalyzeToday, createWorkspace, createWorkspaceInvitation, ensurePersonalWorkspace, ensureUserProfile, getAnalysisHistory, getAnalysisRaw, getOrCreateReferralCode, getReferralStats, getPRReviewHistory, getCurrentUser, getGitHubProviderToken, isAuthConfigured, listUserWorkspaces, listWorkspaceMembers, onAuthStateChange, saveAnalysisRecordReturningId, savePRReview, signInWithGitHub, signOutAuth, toggleAnalysisPublic, watchRepo, unwatchRepo, getWatchedRepos } from './services/supabaseService';
 import { canUseFreeTier, getFreeTierStatus, incrementFreeTierCount } from './utils/freeTier';
 import { getSubscriptionStatus, clearSubscriptionCache, startCheckout, openBillingPortal, getEffectiveDailyLimit, canCreateTeamWorkspace } from './services/stripeService';
 import type { SubscriptionStatus } from './services/stripeService';
@@ -610,6 +610,9 @@ const App: React.FC = () => {
     setPrCommentPosting(true);
     setPrCommentError(null);
 
+    // Use provided token, or fall back to the user's GitHub OAuth provider token
+    const tokenToUse = customToken || (await getGitHubProviderToken()) || undefined;
+
     const riskEmoji = prReviewResult.riskLevel === 'high' ? '🔴' : prReviewResult.riskLevel === 'medium' ? '🟡' : '🟢';
     const topFindings = prReviewResult.findings.slice(0, 5);
 
@@ -651,7 +654,7 @@ const App: React.FC = () => {
         repo.repo,
         prReviewMeta.number,
         lines.join('\n'),
-        customToken
+        tokenToUse
       );
       setPrCommentUrl(url);
       setPrCommentPosted(true);
