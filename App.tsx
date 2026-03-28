@@ -4541,15 +4541,15 @@ const App: React.FC = () => {
                       )}
                    </div>
 
-                   <div className="col-span-12 lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-8 sm:p-10 shadow-2xl flex flex-col overflow-hidden lg:max-h-[750px]">
-                      <div className="flex items-start justify-between gap-4 mb-6">
-                        <div>
+                   <div className="col-span-12 lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-[3rem] p-8 sm:p-10 shadow-2xl flex flex-col min-h-0 lg:h-[750px]">
+                      <div className="flex items-start justify-between gap-4 mb-6 min-w-0">
+                        <div className="min-w-0">
                           <h3 className="text-xl font-black text-white">Architecture Tour</h3>
                           <p className="text-xs text-slate-500 mt-2">
                             {analysis?.architectureTour?.summary || 'Follow the guided steps to understand the system flow.'}
                           </p>
                         </div>
-                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 shrink-0 whitespace-nowrap">
                           Step {tourSteps.length ? tourStepIndex + 1 : 0}/{tourSteps.length}
                         </div>
                       </div>
@@ -4592,7 +4592,7 @@ const App: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="flex-grow overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0" style={{scrollbarWidth:'thin',scrollbarColor:'#334155 transparent'}}>
                         {tourSteps.map((step, index) => (
                           <button
                             key={`${step.nodeId}-${index}`}
