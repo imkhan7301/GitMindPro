@@ -5368,7 +5368,7 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Chat Content */}
-                  <div className="flex-1 flex flex-col">
+                  <div className="flex-1 flex flex-col min-h-0">
                     {/* Suggested Questions - Compact */}
                     {chatHistory.length === 0 && (
                       <div className="p-4 space-y-2">
@@ -5396,7 +5396,7 @@ const App: React.FC = () => {
                     )}
 
                     {/* Chat History */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar min-h-0">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin" style={{scrollbarWidth:'thin',scrollbarColor:'#334155 transparent'}}>
                       {chatHistory.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[85%] p-3 rounded-xl text-sm leading-relaxed ${
